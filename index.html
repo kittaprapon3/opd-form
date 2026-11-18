@@ -410,14 +410,14 @@ function parseIDCard(raw){
 }
 function parseAddr(s){
   s=s.replace(/\s+/g,'').replace(/(หมู่ที่|หมู่|ซอย|ซ\.|ถนน|ถ\.|ตำบล|แขวง|ต\.|อำเภอ|เขต|อ\.|จังหวัด|จ\.|กรุงเทพ)/g,' $1').replace(/(หมู่ที่|หมู่)(\d)/g,'$1 $2').trim(); const r={}; let m;
-  const W='([\\u0E01-\\u0E4E0-9]+)';
-  if(m=s.match(/^([0-9][0-9\/\-]*)/)) r.a_no=m[1];
-  if(m=s.match(/หมู่\s*(?:ที่)?\s*\.?\s*(\d{1,3})/)) r.a_moo=m[1];
+  const W='([\\u0E01-\\u0E4E0-9]+)', WT='([\\u0E01-\\u0E4E]+)';   // WT = ชื่อสถานที่ (ไม่มีตัวเลข)
+  if(m=s.match(/^([0-9][0-9\/\-]*)/)) r.a_no=m[1].replace(/^0+(?=\d)/,'');
+  if(m=s.match(/หม[ูุ]่?\s*(?:ที่?|ท)?\s*\.?\s*(\d{1,3})/)) r.a_moo=m[1];   // รองรับ "หมู่ที 5" ที่ OCR ตกไม้เอก
   if(m=s.match(new RegExp('(?:ซ\\.|ซอย)\\s*'+W+'(?:\\s(\\d+))?'))) r.a_soi=(m[1]+(m[2]?' '+m[2]:'')).replace(/([\u0E01-\u0E4E])(\d)/,'$1 $2');
-  if(m=s.match(new RegExp('(?:ถ\\.|ถนน)\\s*'+W))) r.a_road=m[1];
-  if(m=s.match(new RegExp('(?:ต\\.|ตำบล|แขวง)\\s*'+W))) r.a_tambon=m[1];
-  if(m=s.match(new RegExp('(?:อ\\.|อำเภอ|เขต)\\s*'+W))) r.a_amphoe=m[1];
-  if(m=s.match(new RegExp('(?:จ\\.|จังหวัด)\\s*'+W))) r.a_prov=m[1];
+  if(m=s.match(new RegExp('(?:ถ\\.|ถนน)\\s*'+WT))) r.a_road=m[1];
+  if(m=s.match(new RegExp('(?:ต\\.|ตำบล|แขวง)\\s*'+WT))) r.a_tambon=m[1];
+  if(m=s.match(new RegExp('(?:อ\\.|อำเภอ|เขต)\\s*'+WT))) r.a_amphoe=m[1];
+  if(m=s.match(new RegExp('(?:จ\\.|จังหวัด)\\s*'+WT))) r.a_prov=m[1];
   else if(/กรุงเทพ/.test(s)) r.a_prov='กรุงเทพมหานคร';
   return r;
 }
@@ -558,6 +558,7 @@ const pfxOf=t=>{ const u=t.replace(/\u0E33/g,'า').replace(/\u0E4D/g,''); retur
 const pfxStart=t=>{ const u=t.replace(/\u0E33/g,'า').replace(/\u0E4D/g,''); return PFX.find(p=>u.startsWith(p)&&u.length>p.length+1); };
 const okName=n=>n&&/^[ก-๎]{2,30}$/.test(n.fname)&&/^[ก-๎]{2,30}$/.test(n.lname)&&!ADDR_RE.test(n.fname+' '+n.lname);
 function sexOf(p){return /^(นาย|เด็กชาย|ด\.ช\.)$/.test(p)?'ชาย':'หญิง';}
+let NAME_EN=null;   // ชื่อภาษาอังกฤษจากบัตร (ตั้งค่าใน runOCR)
 function nameFromWords(words){
   // 1) เอาเฉพาะคำภาษาไทย (คำนำหน้าตัวหนามัก OCR ออกมาเป็นอักษรอังกฤษมั่ว ๆ เช่น "WIE)" -> ข้ามไป)
   // ใช้ระดับตัวอักษร (symbols) ถ้ามี เพราะ OCR มักรวม "นาย+ชื่อ+สกุล" เป็นคำเดียว
@@ -573,22 +574,23 @@ function nameFromWords(words){
     ws=ws.slice(wi); ws[0]={...ws[0],t:ws[0].t.slice(charIdx-before)}; ws=ws.filter(w=>w.t);
   };
   // 2) ตัดป้าย "ชื่อตัวและชื่อสกุล"
-  { const {S}=at(); const m=[...S.matchAll(/สกุล|สกล|ชื่อสก|และชื่อ/g)].pop(); if(m) cutAt(m.index+m[0].length); }
+  { const {S}=at(), head=S.slice(0,24); let end=-1;   // หาจุดจบของป้ายที่ไกลที่สุด (รูปแบบที่ OCR มักอ่านเพี้ยน)
+    for(const p of ['สกุล','สกล','ชื่อกุล','ชือกุล','ชื่อสก','ชือสก','และชื่อ','และชือ']){ const k=head.lastIndexOf(p); if(k>=0) end=Math.max(end,k+p.length); }
+    if(end>0) cutAt(end); }
   // 3) หาคำนำหน้า (นาย/นาง/นางสาว/...) ที่ปรากฏก่อน แล้วตัดทุกอย่างก่อนหน้า + ตัวคำนำหน้าออก
   let sex='';
   { const {S}=at(); const u=S.replace(/ำ/g,'า'); let best=null;
     for(const p of PFX){ const k=u.indexOf(p); if(k>=0 && k<=Math.max(12,u.length*.6) && (!best||k<best.k||(k===best.k&&p.length>best.p.length))) best={k,p}; }
     if(best){ sex=sexOf(best.p); cutAt(best.k+best.p.length); } }
   ws=ws.filter(w=>w.t);
-  if(!sex){   // ไม่เจอคำนำหน้า: ถ้าคำแรกสั้นมาก (≤3 ตัว) และยังเหลืออีก ≥2 คำ = คำนำหน้าที่อ่านเพี้ยน (เช่น "นาง" -> "สอ") -> ตัดทิ้ง
-    const wids=[...new Set(ws.map(w=>w.wi))];
-    if(wids.length>=3){ const first=ws.filter(w=>w.wi===wids[0]).map(w=>w.t).join('');
-      if([...first].length<=3) ws=ws.filter(w=>w.wi!==wids[0]); }
-  }
   if(ws.length<2) return null;
   // 4) แบ่ง ชื่อ | นามสกุล ที่ช่องว่างกว้างที่สุดระหว่างคำ
-  let cut=1,gap=-1e9; for(let i=1;i<ws.length;i++){ const g=ws[i].b.x0-ws[i-1].b.x1; if(g>gap){gap=g;cut=i;} }
-  const n={fname:ws.slice(0,cut).map(w=>w.t).join(''), lname:ws.slice(cut).map(w=>w.t).join(''), ...(sex?{sex}:{})};
+  //    ถ้ามีชื่อภาษาอังกฤษบนบัตร ใช้ตัวอักษรแรก (เช่น Tapyoi -> ท) ช่วยเลือกจุดแบ่งที่ถูก
+  const cuts=[]; for(let i=1;i<ws.length;i++) cuts.push({i,g:ws[i].b.x0-ws[i-1].b.x1}); cuts.sort((a,b)=>b.g-a.g);
+  const join=(a,b)=>ws.slice(a,b).map(w=>w.t).join('');
+  let cut=cuts[0].i; const en=NAME_EN||{};
+  if(en.l){ const ok=cuts.find(c=>okInitial(join(c.i),en.l)!==false && (!en.f||okInitial(join(0,c.i),en.f)!==false)); if(ok) cut=ok.i; }
+  const n={fname:join(0,cut), lname:join(cut), ...(sex?{sex}:{})};
   return okName(n)?n:null;
 }
 function nameFromText(t){
@@ -623,6 +625,7 @@ function lev(a,b){ a=[...a]; b=[...b]; const m=a.length,n=b.length; if(!m) retur
   for(let i=1;i<=m;i++){ const c=[i]; for(let j=1;j<=n;j++) c[j]=Math.min(p[j]+1,c[j-1]+1,p[j-1]+(a[i-1]===b[j-1]?0:1)); p=c; }
   return p[n]; }
 function nearest(w,list){ if(!w) return null; w=w.replace(/\s/g,''); let best=null,bd=1e9;
+  const pre=list.filter(x=>[...x].length>=3&&w.startsWith(x)).sort((a,b)=>b.length-a.length)[0]; if(pre) return pre;   // เช่น "ลำแก่น007ภัป" -> "ลำแก่น"
   for(const x of list){ if(x===w) return x; const d=lev(w,x); if(d<bd){bd=d;best=x;} }
   return bd<=Math.max(1,Math.floor([...w].length*.34))?best:null; }
 async function snapAddr(o){
@@ -673,13 +676,15 @@ async function runOCR(src){
     // รอบที่ 2: ตัดบรรทัดสำคัญจากภาพความละเอียดเต็มมาอ่านซ้ำ
     status('กำลังอ่านชื่อ-ที่อยู่อย่างละเอียด (2/2)...');
     const t=l=>cleanThai(l.text);
+    NAME_EN=engNames(data.text);
     const nameL=findNameLine(lines);
     if(nameL){
       const wt=await getWorkerTha();
       const r=await readLine(wt,src,nameL,k,{_heights:[70,90,110,130]}); crops.name=r.img;
       const p1=readLineCand(nameL);   // ผลรอบแรก (tha+eng)
-      // โหวตแยก "นามสกุล" และ "ชื่อ": ผลจากภาพความละเอียดเต็มนับ 1 เสียง ผลรอบแรก (ภาพย่อ) นับครึ่งเสียง
-      const cands=[...r.all.map(c=>({...c,wt:1})),{...p1,wt:.5}].map(c=>({...c,nm:nameFromWords(c.words)||nameFromText(c.text)})).filter(c=>c.nm);
+      // โหวตแยก "นามสกุล" และ "ชื่อ"
+      // น้ำหนักเสียงตามความมั่นใจ: ผลที่ระบบมั่นใจสูงมีน้ำหนักมากกว่ามาก (ภาพจริงบางครั้งอ่านซ้ำได้แย่กว่ารอบแรก)
+      const cands=r.all.map(c=>({...c,wt:Math.pow(Math.max(0,(c.conf||0)-50)/40,2)})).map(c=>({...c,nm:nameFromWords(c.words)||nameFromText(c.text)})).filter(c=>c.nm);
       const vote=(arr,key)=>{ const v={}; arr.forEach(c=>{ const x=c.nm[key]; (v[x]=v[x]||{x,n:0,conf:0}).n+=c.wt; v[x].conf=Math.max(v[x].conf,c.conf||0); });
         return Object.values(v).sort((a,b)=>b.n-a.n||b.conf-a.conf)[0]; };
       if(window.OCR_DEBUG) window.__ocrDebug={line:nameL.text,cands:cands.map(c=>({t:c.text,conf:Math.round(c.conf),nm:c.nm}))};
