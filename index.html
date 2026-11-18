@@ -561,9 +561,9 @@ function sexOf(p){return /^(นาย|เด็กชาย|ด\.ช\.)$/.test(p
 function nameFromWords(words){
   // 1) เอาเฉพาะคำภาษาไทย (คำนำหน้าตัวหนามัก OCR ออกมาเป็นอักษรอังกฤษมั่ว ๆ เช่น "WIE)" -> ข้ามไป)
   // ใช้ระดับตัวอักษร (symbols) ถ้ามี เพราะ OCR มักรวม "นาย+ชื่อ+สกุล" เป็นคำเดียว
-  const units=(words||[]).flatMap(w=>(w&&w.symbols&&w.symbols.length&&!/[A-Za-z]{2,}/.test(w.text||''))?w.symbols:[w]);
-  let ws=units.filter(w=>w&&w.bbox&&!/[A-Za-z]{2,}/.test(w.text||''))
-    .map(w=>({t:cleanThai(w.text||'').replace(/[^ก-๎]/g,'').replace(/ํา/g,'ำ'),b:w.bbox})).filter(w=>w.t);
+  const units=(words||[]).flatMap((w,wi)=>!w||/[A-Za-z]{2,}/.test(w.text||'')?[]:((w.symbols&&w.symbols.length)?w.symbols:[w]).map(u=>({...u,wi})));
+  let ws=units.filter(w=>w&&w.bbox)
+    .map(w=>({t:cleanThai(w.text||'').replace(/[^ก-๎]/g,'').replace(/\u0E4D\u0E32/g,'\u0E33'),b:w.bbox,wi:w.wi})).filter(w=>w.t);
   if(ws.length<2) return null;
   // ข้อความรวม + ตำแหน่งตัวอักษร -> คำ
   const at=()=>{ let S='',map=[]; ws.forEach((w,i)=>{ for(const ch of w.t){ S+=ch; map.push(i);} }); return {S,map}; };
@@ -580,10 +580,10 @@ function nameFromWords(words){
     for(const p of PFX){ const k=u.indexOf(p); if(k>=0 && k<=Math.max(12,u.length*.6) && (!best||k<best.k||(k===best.k&&p.length>best.p.length))) best={k,p}; }
     if(best){ sex=sexOf(best.p); cutAt(best.k+best.p.length); } }
   ws=ws.filter(w=>w.t);
-  if(!sex && ws.length>=3){   // ไม่เจอคำนำหน้า: ถ้ากลุ่มแรกสั้นมาก (≤3 ตัว) และห่างจากที่เหลือ = คำนำหน้าที่อ่านเพี้ยน -> ตัดทิ้ง
-    const hs=ws.map(w=>w.b.y1-w.b.y0).sort((a,b)=>a-b), h=hs[hs.length>>1]||20;
-    let n=0,len=0; while(n<ws.length-1){ len+=ws[n].t.length; n++; if(ws[n].b.x0-ws[n-1].b.x1>h*.35) break; }
-    if(n<ws.length && len<=3 && ws.length-n>=2) ws=ws.slice(n);
+  if(!sex){   // ไม่เจอคำนำหน้า: ถ้าคำแรกสั้นมาก (≤3 ตัว) และยังเหลืออีก ≥2 คำ = คำนำหน้าที่อ่านเพี้ยน (เช่น "นาง" -> "สอ") -> ตัดทิ้ง
+    const wids=[...new Set(ws.map(w=>w.wi))];
+    if(wids.length>=3){ const first=ws.filter(w=>w.wi===wids[0]).map(w=>w.t).join('');
+      if([...first].length<=3) ws=ws.filter(w=>w.wi!==wids[0]); }
   }
   if(ws.length<2) return null;
   // 4) แบ่ง ชื่อ | นามสกุล ที่ช่องว่างกว้างที่สุดระหว่างคำ
@@ -662,8 +662,8 @@ async function runOCR(src){
       const vote=(arr,key)=>{ const v={}; arr.forEach(c=>{ const x=c.nm[key]; (v[x]=v[x]||{x,n:0,conf:0}).n+=c.wt; v[x].conf=Math.max(v[x].conf,c.conf||0); });
         return Object.values(v).sort((a,b)=>b.n-a.n||b.conf-a.conf)[0]; };
       if(window.OCR_DEBUG) window.__ocrDebug={line:nameL.text,cands:cands.map(c=>({t:c.text,conf:Math.round(c.conf),nm:c.nm}))};
-      const ln=vote(cands.filter(c=>(c.conf||0)>=70),'lname');   // ผลที่ระบบไม่มั่นใจ ไม่นำมาใส่
-      if(ln){ const same=cands.filter(c=>c.nm.lname===ln.x&&(c.conf||0)>=70), fn=vote(same,'fname');
+      const ln=vote(cands.filter(c=>(c.conf||0)>=60),'lname');   // ผลที่ระบบไม่มั่นใจ ไม่นำมาใส่
+      if(ln){ let same=cands.filter(c=>c.nm.lname===ln.x&&(c.conf||0)>=70); if(!same.length) same=cands.filter(c=>c.nm.lname===ln.x); const fn=vote(same,'fname');
         o.fname=fn.x; o.lname=ln.x; const sx=same.find(c=>c.nm.sex); if(sx) o.sex=sx.nm.sex; }
     }
     if(!o.cid || !validCID(o.cid)){   // อ่านเลขบัตรซ้ำแบบรับเฉพาะตัวเลข
