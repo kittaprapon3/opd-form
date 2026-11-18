@@ -542,7 +542,9 @@ const okName=n=>n&&/^[ก-๎]{2,30}$/.test(n.fname)&&/^[ก-๎]{2,30}$/.test(n
 function sexOf(p){return /^(นาย|เด็กชาย|ด\.ช\.)$/.test(p)?'ชาย':'หญิง';}
 function nameFromWords(words){
   // 1) เอาเฉพาะคำภาษาไทย (คำนำหน้าตัวหนามัก OCR ออกมาเป็นอักษรอังกฤษมั่ว ๆ เช่น "WIE)" -> ข้ามไป)
-  let ws=(words||[]).filter(w=>w&&w.bbox&&!/[A-Za-z]{2,}/.test(w.text||''))
+  // ใช้ระดับตัวอักษร (symbols) ถ้ามี เพราะ OCR มักรวม "นาย+ชื่อ+สกุล" เป็นคำเดียว
+  const units=(words||[]).flatMap(w=>(w&&w.symbols&&w.symbols.length&&!/[A-Za-z]{2,}/.test(w.text||''))?w.symbols:[w]);
+  let ws=units.filter(w=>w&&w.bbox&&!/[A-Za-z]{2,}/.test(w.text||''))
     .map(w=>({t:cleanThai(w.text||'').replace(/[^ก-๎]/g,'').replace(/ํา/g,'ำ'),b:w.bbox})).filter(w=>w.t);
   if(ws.length<2) return null;
   // ข้อความรวม + ตำแหน่งตัวอักษร -> คำ
@@ -554,10 +556,10 @@ function nameFromWords(words){
   };
   // 2) ตัดป้าย "ชื่อตัวและชื่อสกุล"
   { const {S}=at(); const m=[...S.matchAll(/สกุล|สกล|ชื่อสก|และชื่อ/g)].pop(); if(m) cutAt(m.index+m[0].length); }
-  // 3) หาคำนำหน้า (นาย/นาง/นางสาว/...) ใน 12 ตัวอักษรแรก แล้วตัดทุกอย่างก่อนหน้า + ตัวคำนำหน้าออก
+  // 3) หาคำนำหน้า (นาย/นาง/นางสาว/...) ที่ปรากฏก่อน แล้วตัดทุกอย่างก่อนหน้า + ตัวคำนำหน้าออก
   let sex='';
   { const {S}=at(); const u=S.replace(/ำ/g,'า'); let best=null;
-    for(const p of PFX){ const k=u.indexOf(p); if(k>=0 && k<=12 && (!best||k<best.k||(k===best.k&&p.length>best.p.length))) best={k,p}; }
+    for(const p of PFX){ const k=u.indexOf(p); if(k>=0 && k<=Math.max(12,u.length*.6) && (!best||k<best.k||(k===best.k&&p.length>best.p.length))) best={k,p}; }
     if(best){ sex=sexOf(best.p); cutAt(best.k+best.p.length); } }
   ws=ws.filter(w=>w.t);
   if(ws.length<2) return null;
