@@ -541,36 +541,29 @@ const pfxStart=t=>{ const u=t.replace(/\u0E33/g,'า').replace(/\u0E4D/g,''); re
 const okName=n=>n&&/^[ก-๎]{2,30}$/.test(n.fname)&&/^[ก-๎]{2,30}$/.test(n.lname)&&!ADDR_RE.test(n.fname+' '+n.lname);
 function sexOf(p){return /^(นาย|เด็กชาย|ด\.ช\.)$/.test(p)?'ชาย':'หญิง';}
 function nameFromWords(words){
-  // 1) เอาเฉพาะคำภาษาไทย (คำนำหน้าตัวหนามัก OCR ออกมาเป็นอักษรอังกฤษมั่ว ๆ เช่น "WIE)" -> ใช้เป็นตัวคั่นแทน)
-  const ws=(words||[]).filter(w=>w&&w.bbox).map(w=>({t:cleanThai(w.text||'').replace(/[^ก-๎.]/g,''),b:w.bbox,raw:w.text||''}));
-  if(!ws.length) return null;
-  const hs=ws.map(w=>w.b.y1-w.b.y0).sort((a,b)=>a-b), h=hs[hs.length>>1]||20;
-  // 2) จับกลุ่มคำตามระยะห่าง: ช่องว่างกว้าง = คนละคำ (ป้าย / คำนำหน้า / ชื่อ / นามสกุล)
-  let groups=[], cur=null, prev=null;
-  for(const w of ws){
-    const thai=w.t.replace(/\./g,'').length>0 && !/[A-Za-z]{2,}/.test(w.raw);
-    if(!thai) continue;   // คำที่อ่านเป็นอักษรอังกฤษ/สัญลักษณ์ ข้ามไป
-    if(!cur || (prev && w.b.x0-prev.b.x1>h*.35)){ cur={t:'',x0:w.b.x0,x1:w.b.x1}; groups.push(cur); }
-    cur.t+=w.t; cur.x1=w.b.x1; prev=w;
-  }
-  // 3) ตัดป้าย "ชื่อตัวและชื่อสกุล" (และทุกอย่างทางซ้ายของป้าย)
-  const li=groups.map(g=>/ชื่|ตัวและ|และชื่|สกุล|สกล/.test(g.t)&&g.t.length>=4).lastIndexOf(true);
-  if(li>=0) groups=groups.slice(li+1);
-  groups=groups.filter(g=>g.t.replace(/\./g,'').length>=1);
-  // 4) ตัดคำนำหน้า (อ่านถูก หรือเป็นกลุ่มสั้น ๆ หน้าสุดที่อ่านเพี้ยน)
+  // 1) เอาเฉพาะคำภาษาไทย (คำนำหน้าตัวหนามัก OCR ออกมาเป็นอักษรอังกฤษมั่ว ๆ เช่น "WIE)" -> ข้ามไป)
+  let ws=(words||[]).filter(w=>w&&w.bbox&&!/[A-Za-z]{2,}/.test(w.text||''))
+    .map(w=>({t:cleanThai(w.text||'').replace(/[^ก-๎]/g,'').replace(/ํา/g,'ำ'),b:w.bbox})).filter(w=>w.t);
+  if(ws.length<2) return null;
+  // ข้อความรวม + ตำแหน่งตัวอักษร -> คำ
+  const at=()=>{ let S='',map=[]; ws.forEach((w,i)=>{ for(const ch of w.t){ S+=ch; map.push(i);} }); return {S,map}; };
+  const cutAt=(charIdx)=>{ // ตัดทุกอย่างก่อนตำแหน่งตัวอักษร charIdx (แยกคำที่คร่อมอยู่)
+    const {S,map}=at(); if(charIdx>=S.length){ ws=[]; return; }
+    const wi=map[charIdx]; let before=0; for(let k=0;k<wi;k++) before+=ws[k].t.length;
+    ws=ws.slice(wi); ws[0]={...ws[0],t:ws[0].t.slice(charIdx-before)}; ws=ws.filter(w=>w.t);
+  };
+  // 2) ตัดป้าย "ชื่อตัวและชื่อสกุล"
+  { const {S}=at(); const m=[...S.matchAll(/สกุล|สกล|ชื่อสก|และชื่อ/g)].pop(); if(m) cutAt(m.index+m[0].length); }
+  // 3) หาคำนำหน้า (นาย/นาง/นางสาว/...) ใน 12 ตัวอักษรแรก แล้วตัดทุกอย่างก่อนหน้า + ตัวคำนำหน้าออก
   let sex='';
-  if(groups.length){
-    const p=pfxOf(groups[0].t);
-    if(p){ sex=sexOf(p); groups.shift(); }
-    else{ const q=pfxStart(groups[0].t);
-      if(q){ sex=sexOf(q); groups[0]={...groups[0],t:groups[0].t.replace(/ำ/g,'า').replace(/ํ/g,'').slice(q.length)}; }
-      else if(groups.length>=3 && groups[0].t.length<=4) groups.shift(); }
-  }
-  groups=groups.filter(g=>g.t.replace(/\./g,'').length>=1);
-  if(groups.length<2) return null;
-  // 5) แบ่ง ชื่อ | นามสกุล ที่ช่องว่างกว้างที่สุดระหว่างกลุ่ม
-  let cut=1,gap=-1e9; for(let i=1;i<groups.length;i++){ const g=groups[i].x0-groups[i-1].x1; if(g>gap){gap=g;cut=i;} }
-  const n={fname:groups.slice(0,cut).map(g=>g.t).join('').replace(/\./g,''), lname:groups.slice(cut).map(g=>g.t).join('').replace(/\./g,''), ...(sex?{sex}:{})};
+  { const {S}=at(); const u=S.replace(/ำ/g,'า'); let best=null;
+    for(const p of PFX){ const k=u.indexOf(p); if(k>=0 && k<=12 && (!best||k<best.k||(k===best.k&&p.length>best.p.length))) best={k,p}; }
+    if(best){ sex=sexOf(best.p); cutAt(best.k+best.p.length); } }
+  ws=ws.filter(w=>w.t);
+  if(ws.length<2) return null;
+  // 4) แบ่ง ชื่อ | นามสกุล ที่ช่องว่างกว้างที่สุดระหว่างคำ
+  let cut=1,gap=-1e9; for(let i=1;i<ws.length;i++){ const g=ws[i].b.x0-ws[i-1].b.x1; if(g>gap){gap=g;cut=i;} }
+  const n={fname:ws.slice(0,cut).map(w=>w.t).join(''), lname:ws.slice(cut).map(w=>w.t).join(''), ...(sex?{sex}:{})};
   return okName(n)?n:null;
 }
 function nameFromText(t){
@@ -617,6 +610,7 @@ async function runOCR(src){
       const cands=[...r.all.map(c=>({...c,wt:1})),{...p1,wt:.5}].map(c=>({...c,nm:nameFromWords(c.words)||nameFromText(c.text)})).filter(c=>c.nm);
       const vote=(arr,key)=>{ const v={}; arr.forEach(c=>{ const x=c.nm[key]; (v[x]=v[x]||{x,n:0,conf:0}).n+=c.wt; v[x].conf=Math.max(v[x].conf,c.conf||0); });
         return Object.values(v).sort((a,b)=>b.n-a.n||b.conf-a.conf)[0]; };
+      if(window.OCR_DEBUG) window.__ocrDebug={line:nameL.text,cands:cands.map(c=>({t:c.text,conf:Math.round(c.conf),nm:c.nm}))};
       const ln=vote(cands.filter(c=>(c.conf||0)>=70),'lname');   // ผลที่ระบบไม่มั่นใจ ไม่นำมาใส่
       if(ln){ const same=cands.filter(c=>c.nm.lname===ln.x&&(c.conf||0)>=70), fn=vote(same,'fname');
         o.fname=fn.x; o.lname=ln.x; const sx=same.find(c=>c.nm.sex); if(sx) o.sex=sx.nm.sex; }
