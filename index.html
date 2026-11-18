@@ -340,6 +340,24 @@ rankSel.addEventListener('change',()=>{
 [form.fname,form.lname].forEach(el=>el.addEventListener('input',composeRank));
 form.sex.addEventListener('change',composeRank);
 
+
+/* ---------- ช่วยกรอกที่อยู่: รายการ จังหวัด / อำเภอ / ตำบล ให้เลือก ---------- */
+(function(){
+  const dl=id=>{ let d=document.getElementById(id); if(!d){ d=document.createElement('datalist'); d.id=id; document.body.appendChild(d);} return d; };
+  const fill=(d,arr)=>{ d.innerHTML=arr.map(x=>`<option value="${x}">`).join(''); };
+  for(const p of ['a','c']){
+    const P=form.elements[p+'_prov'], A=form.elements[p+'_amphoe'], T=form.elements[p+'_tambon'];
+    P.setAttribute('list',p+'_provList'); A.setAttribute('list',p+'_ampList'); T.setAttribute('list',p+'_tamList');
+    const upd=async()=>{ const db=await addrDB(); if(!Object.keys(db).length) return;
+      fill(dl(p+'_provList'),Object.keys(db));
+      const pv=db[P.value.trim()];
+      fill(dl(p+'_ampList'), pv?Object.keys(pv):[]);
+      const am=pv&&pv[A.value.trim()];
+      fill(dl(p+'_tamList'), am?am:(pv?[...new Set(Object.values(pv).flat())]:[]));
+    };
+    [P,A,T].forEach(el=>{ el.addEventListener('focus',upd); el.addEventListener('change',upd); });
+  }
+})();
 /* ======================================================================
    ID card OCR
    ====================================================================== */
@@ -562,6 +580,11 @@ function nameFromWords(words){
     for(const p of PFX){ const k=u.indexOf(p); if(k>=0 && k<=Math.max(12,u.length*.6) && (!best||k<best.k||(k===best.k&&p.length>best.p.length))) best={k,p}; }
     if(best){ sex=sexOf(best.p); cutAt(best.k+best.p.length); } }
   ws=ws.filter(w=>w.t);
+  if(!sex && ws.length>=3){   // ไม่เจอคำนำหน้า: ถ้ากลุ่มแรกสั้นมาก (≤3 ตัว) และห่างจากที่เหลือ = คำนำหน้าที่อ่านเพี้ยน -> ตัดทิ้ง
+    const hs=ws.map(w=>w.b.y1-w.b.y0).sort((a,b)=>a-b), h=hs[hs.length>>1]||20;
+    let n=0,len=0; while(n<ws.length-1){ len+=ws[n].t.length; n++; if(ws[n].b.x0-ws[n-1].b.x1>h*.35) break; }
+    if(n<ws.length && len<=3 && ws.length-n>=2) ws=ws.slice(n);
+  }
   if(ws.length<2) return null;
   // 4) แบ่ง ชื่อ | นามสกุล ที่ช่องว่างกว้างที่สุดระหว่างคำ
   let cut=1,gap=-1e9; for(let i=1;i<ws.length;i++){ const g=ws[i].b.x0-ws[i-1].b.x1; if(g>gap){gap=g;cut=i;} }
@@ -591,6 +614,32 @@ function findNameLine(lines){
   if(ei>0 && between.length) return between[between.length-1];
   return lines.find(l=>/(^|\s)(นาย|นางสาว|นาง|น\.ส\.|เด็กชาย|เด็กหญิง)(\s|$)/.test(T(l)) && !ADDR_RE.test(T(l))) || null;
 }
+
+/* เทียบชื่อ ตำบล/อำเภอ/จังหวัด กับฐานข้อมูลที่อยู่ไทย (ปณท.) แล้วแก้ตัวที่ OCR อ่านเพี้ยนให้เป็นชื่อจริงที่ใกล้ที่สุด */
+let ADDR_DB=null;
+async function addrDB(){ if(!ADDR_DB){ try{ ADDR_DB=await (await fetch('thai-address.json')).json(); }catch(e){ ADDR_DB={}; } } return ADDR_DB; }
+function lev(a,b){ a=[...a]; b=[...b]; const m=a.length,n=b.length; if(!m) return n; if(!n) return m;
+  let p=Array.from({length:n+1},(_,j)=>j);
+  for(let i=1;i<=m;i++){ const c=[i]; for(let j=1;j<=n;j++) c[j]=Math.min(p[j]+1,c[j-1]+1,p[j-1]+(a[i-1]===b[j-1]?0:1)); p=c; }
+  return p[n]; }
+function nearest(w,list){ if(!w) return null; w=w.replace(/\s/g,''); let best=null,bd=1e9;
+  for(const x of list){ if(x===w) return x; const d=lev(w,x); if(d<bd){bd=d;best=x;} }
+  return bd<=Math.max(1,Math.floor([...w].length*.34))?best:null; }
+async function snapAddr(o){
+  const db=await addrDB(), provs=Object.keys(db); if(!provs.length) return;
+  let P=o.a_prov?nearest(o.a_prov,provs):null, A=null;
+  if(o.a_amphoe){
+    if(P) A=nearest(o.a_amphoe,Object.keys(db[P]));
+    else{ const all=provs.flatMap(p=>Object.keys(db[p]).map(a=>[p,a])); const hit=nearest(o.a_amphoe,all.map(x=>x[1]));
+          const ps=all.filter(x=>x[1]===hit); if(hit&&ps.length===1){ A=hit; P=ps[0][0]; } }
+  }
+  if(o.a_tambon){
+    const pool=A?db[P][A].map(t=>[A,t]) : P?Object.entries(db[P]).flatMap(([a,ts])=>ts.map(t=>[a,t])) : [];
+    if(pool.length){ const hit=nearest(o.a_tambon,pool.map(x=>x[1]));
+      if(hit){ o.a_tambon=hit; const as=pool.filter(x=>x[1]===hit); if(!A&&as.length===1) A=as[0][0]; } }
+  }
+  if(P) o.a_prov=P; if(A) o.a_amphoe=A;
+}
 async function runOCR(src){
   status('กำลังเตรียมระบบอ่านบัตร... (ครั้งแรกอาจใช้เวลาสักครู่)');
   try{
@@ -606,7 +655,7 @@ async function runOCR(src){
     const nameL=findNameLine(lines);
     if(nameL){
       const wt=await getWorkerTha();
-      const r=await readLine(wt,src,nameL,k,{_heights:[80,110,150,190]}); crops.name=r.img;
+      const r=await readLine(wt,src,nameL,k,{_heights:[70,90,110,130]}); crops.name=r.img;
       const p1=readLineCand(nameL);   // ผลรอบแรก (tha+eng)
       // โหวตแยก "นามสกุล" และ "ชื่อ": ผลจากภาพความละเอียดเต็มนับ 1 เสียง ผลรอบแรก (ภาพย่อ) นับครึ่งเสียง
       const cands=[...r.all.map(c=>({...c,wt:1})),{...p1,wt:.5}].map(c=>({...c,nm:nameFromWords(c.words)||nameFromText(c.text)})).filter(c=>c.nm);
@@ -633,6 +682,7 @@ async function runOCR(src){
       const p=parseAddr(cleanThai(txt).replace(/.*?(ที่อยู่|ทีอยู่)\s*/,''));
       for(const [kk,v] of Object.entries(p)) if(v) o[kk]=v;
     }
+    try{ await snapAddr(o); }catch(e){}
     const n=applyOCR(o); showCrops(crops);
     if(!o.fname){ form.fname.value=''; form.lname.value=''; form.fname.classList.add('invalid'); form.lname.classList.add('invalid');
       form.fname.placeholder=form.lname.placeholder='อ่านจากบัตรไม่ได้ กรุณากรอกตามภาพ'; composeRank(); }
