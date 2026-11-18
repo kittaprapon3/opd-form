@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<title>QR code — แบบขอมีเวชระเบียนผู้ป่วยนอก</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  body{margin:0;font-family:'Sarabun',Tahoma,sans-serif;background:#eef2f7;color:#0b2e59}
+  .bar{display:flex;gap:10px;justify-content:center;padding:12px;background:#0b2e59}
+  .bar button,.bar a{font:inherit;font-weight:600;border:0;border-radius:8px;padding:10px 18px;cursor:pointer;background:#fff;color:#0b2e59;text-decoration:none}
+  .poster{width:210mm;min-height:297mm;margin:16px auto;background:#fff;box-shadow:0 2px 14px rgba(0,0,0,.15);
+          box-sizing:border-box;padding:18mm 16mm;text-align:center;display:flex;flex-direction:column;align-items:center}
+  .poster img.logo{width:32mm}
+  h1{font-size:30pt;margin:6mm 0 2mm;line-height:1.25}
+  h2{font-size:17pt;font-weight:600;margin:0 0 8mm;color:#33507a}
+  #qr{padding:6mm;border:3px solid #0b2e59;border-radius:6mm;background:#fff}
+  #qr img,#qr canvas{width:110mm!important;height:110mm!important;display:block}
+  .scan{font-size:22pt;font-weight:700;margin:7mm 0 4mm}
+  ol{text-align:left;font-size:15pt;line-height:1.8;margin:0 auto;max-width:150mm;padding-left:8mm}
+  .url{margin-top:auto;font-size:9pt;color:#7a8aa3;word-break:break-all;padding-top:8mm}
+  .foot{font-size:11pt;color:#33507a;margin-top:2mm}
+  @media print{@page{size:A4;margin:0}body{background:#fff}.bar{display:none}.poster{margin:0;box-shadow:none}}
+</style>
+</head>
+<body>
+<div class="bar">
+  <button onclick="window.print()">🖨 พิมพ์โปสเตอร์</button>
+  <a id="dl" download="QR-แบบขอมีเวชระเบียน.png">⬇ ดาวน์โหลด QR (PNG)</a>
+  <a id="open" href="./">เปิดแบบฟอร์ม</a>
+</div>
+<div class="poster">
+  <img class="logo" src="data:image/jpeg;base64,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" alt="">
+  <h1>แบบขอมีเวชระเบียนผู้ป่วยนอก<br>ออนไลน์</h1>
+  <h2>สถานพยาบาลปฐมภูมิ ทร.</h2>
+  <div id="qr"></div>
+  <div class="scan">📱 สแกนเพื่อกรอกแบบฟอร์ม</div>
+  <ol>
+    <li>สแกน QR code ด้วยกล้องโทรศัพท์</li>
+    <li>ถ่ายรูปบัตรประชาชนเพื่อกรอกข้อมูลอัตโนมัติ แล้วตรวจสอบ</li>
+    <li>กรอกข้อมูลที่เหลือ และเซ็นชื่อบนหน้าจอ</li>
+    <li>กด “ส่งคำขอ” แล้วแจ้ง <b>เลขที่คำขอ</b> กับเจ้าหน้าที่</li>
+  </ol>
+  <div class="url" id="url"></div>
+  <div class="foot">FM-NMD-OPD-01-R02-01-67</div>
+</div>
+<script>
+  const url = new URL('./', location.href).href;   // หน้าแบบฟอร์มอยู่โฟลเดอร์เดียวกัน
+  document.getElementById('url').textContent = url;
+  new QRCode(document.getElementById('qr'), {text:url, width:1024, height:1024, correctLevel:QRCode.CorrectLevel.M});
+  setTimeout(()=>{ const c=document.querySelector('#qr canvas'); if(c) document.getElementById('dl').href=c.toDataURL('image/png'); },300);
+</script>
+</body>
+</html>
