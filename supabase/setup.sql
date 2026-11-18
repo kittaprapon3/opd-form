@@ -112,8 +112,9 @@ end $$;
 
 revoke all on function public.submit_request(jsonb) from public;
 grant execute on function public.submit_request(jsonb) to anon, authenticated;
-revoke all on function public.is_staff() from public;
+revoke all on function public.is_staff() from public, anon;
 grant execute on function public.is_staff() to authenticated;
+revoke all on function public.requests_touch() from public, anon, authenticated;
 
 -- =====================================================================
 --  เพิ่มอีเมลเจ้าหน้าที่ (แก้แล้วรันเฉพาะบรรทัดนี้ได้ทุกเมื่อ)
