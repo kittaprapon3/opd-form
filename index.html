@@ -7,7 +7,6 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js" defer></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
 <link rel="stylesheet" href="form-sheet.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
@@ -71,6 +70,8 @@
   #done #refNo{font-size:24px;font-weight:700;letter-spacing:1px}
   #sendErr{display:none;max-width:620px;margin:14px auto 0;background:#fdeeee;border:1px solid #f1c0bd;color:#8c2a22;border-radius:10px;padding:10px 14px;text-align:center}
   @media print{
+    body *{visibility:hidden!important}
+    body::after{content:'แบบฟอร์มนี้ใช้ส่งออนไลน์เท่านั้น';visibility:visible}
     @page{size:A4;margin:0}
     body{background:#fff}
     header,main,.toolbar,#cam,#sendErr,#done{display:none!important}
@@ -228,9 +229,6 @@
   <div class="toolbar">
     <button class="ghost" id="back">← แก้ไขข้อมูล</button>
     <button class="send" id="send" style="display:none">✔ ส่งคำขอ</button>
-    <button class="ghost" id="savePdf">⬇ บันทึก PDF</button>
-    <button class="ghost" id="sharePdf" style="display:none">📤 ส่งไฟล์</button>
-    <button class="ghost" id="print">พิมพ์</button>
   </div>
   <div id="sendErr"></div>
   <div id="done"><b>✓ ส่งคำขอเรียบร้อยแล้ว</b><br>เลขที่คำขอ <span id="refNo"></span><br><small>กรุณาแจ้งเลขที่คำขอนี้กับเจ้าหน้าที่เวชระเบียน (แคปหน้าจอเก็บไว้ได้)</small></div>
@@ -651,9 +649,8 @@ function render(o){
   showErr(''); resetSend();
   fitSheet(); window.scrollTo(0,0);
 }
-const makePDF=()=>FormSheet.pdf(lastItems,$('#bgimg').src);
 function resetSend(){
-  const b=$('#send'); b.style.display=SB?'':'none'; b.disabled=false; b.textContent='✔ ส่งคำขอ';
+  const b=$('#send'); b.style.display=SB?'':'none'; if(!SB) showErr('ระบบรับคำขอยังไม่พร้อมใช้งาน กรุณาติดต่อเจ้าหน้าที่'); b.disabled=false; b.textContent='✔ ส่งคำขอ';
   $('#done').style.display='none'; $('#back').style.display=''; $('#back').disabled=false;
 }
 $('#send').onclick=async()=>{
@@ -674,20 +671,6 @@ function fitSheet(){
   FormSheet.fit($('#wrap'),document.querySelector('.sheet'),window.innerWidth-16);
 }
 $('#back').onclick=()=>{$('#paper').style.display='none';$('#formView').style.display='block';document.querySelector('header').style.display='block';sizeCanvas();};
-$('#print').onclick=()=>window.print();
-const pdfName=()=>`แบบขอเวชระเบียน_${(last.fname||'').trim()}_${(last.lname||'').trim()}.pdf`.replace(/[\\/:*?"<>|\s]+/g,'_');
-async function withBusy(btn,fn){
-  const t=btn.textContent; btn.disabled=true; btn.textContent='กำลังสร้างไฟล์...'; showErr('');
-  try{ await fn(); }catch(e){ if(e&&e.name!=='AbortError') showErr('ทำรายการไม่สำเร็จ: '+(e.message||e)); }
-  finally{ btn.disabled=false; btn.textContent=t; }
-}
-$('#savePdf').onclick=()=>withBusy($('#savePdf'),async()=>{ (await makePDF()).save(pdfName()); });
-$('#sharePdf').onclick=()=>withBusy($('#sharePdf'),async()=>{
-  const f=new File([(await makePDF()).output('blob')],pdfName(),{type:'application/pdf'});
-  await navigator.share({files:[f],title:'แบบขอมีเวชระเบียนผู้ป่วยนอก'});
-});
-// ปุ่ม "ส่งไฟล์" (แชร์ผ่าน LINE / อีเมล ฯลฯ) แสดงเฉพาะเครื่องที่รองรับการแชร์ไฟล์
-try{ if(navigator.canShare && navigator.canShare({files:[new File(['x'],'t.pdf',{type:'application/pdf'})]})) $('#sharePdf').style.display=''; }catch(e){}
 function showErr(m){ const e=$('#sendErr'); e.textContent=m; e.style.display=m?'block':'none'; }
 </script>
 </body>
