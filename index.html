@@ -487,9 +487,10 @@ function otsu(c){
 function scaled(src,W){const c=document.createElement('canvas');c.width=W;c.height=Math.round(src.height*W/src.width);
   c.getContext('2d').drawImage(src,0,0,c.width,c.height);return c;}
 /* ตัดบรรทัดจากภาพเต็ม ปรับเป็นสีเทา+คอนทราสต์เฉพาะส่วนที่ตัด แล้วขยายให้ตัวอักษรสูง targetH px และเว้นขอบขาว */
-function cropLine(src,b,k,targetH){
-  const h=(b.y1-b.y0)*k, py=h*.08, px=h*.4;
-  const x0=Math.max(0,b.x0*k-px), y0=Math.max(0,b.y0*k-py), x1=Math.min(src.width,b.x1*k+px), y1=Math.min(src.height,b.y1*k+py);
+function cropLine(src,b,k,targetH,padTop,padBot){
+  // เผื่อขอบบน-ล่างมาก ๆ เพราะกรอบที่ระบบหาได้มักไม่รวมสระบน/วรรณยุกต์ (ั ิ ี ่ ้ ์) และสระล่าง (ุ ู)
+  const h=(b.y1-b.y0)*k, pt=h*(padTop??.55), pb=h*(padBot??.35), px=h*.4;
+  const x0=Math.max(0,b.x0*k-px), y0=Math.max(0,b.y0*k-pt), x1=Math.min(src.width,b.x1*k+px), y1=Math.min(src.height,b.y1*k+pb);
   const raw=document.createElement('canvas'); raw.width=Math.max(1,Math.round(x1-x0)); raw.height=Math.max(1,Math.round(y1-y0));
   raw.getContext('2d').drawImage(src,x0,y0,x1-x0,y1-y0,0,0,raw.width,raw.height);
   stretch(toGray(raw));
@@ -519,8 +520,10 @@ function linesOf(data){
 /* อ่านบรรทัดเดียวซ้ำจากภาพความละเอียดเต็ม 2 ขนาด แล้วเลือกผลที่ระบบมั่นใจที่สุด (รวมผลรอบแรกด้วย) */
 async function readLine(w,src,line,k,extra){
   const cands=[{text:line.text, conf:line.confidence||0, words:line.words||[]}];
-  const hs=(extra&&extra._heights)||[64,100]; extra=extra?{...extra}:null; if(extra) delete extra._heights; if(extra&&!Object.keys(extra).length) extra=null;
-  const imgs=hs.map(h=>cropLine(src,line.bbox,k,h)), B=imgs[Math.min(1,imgs.length-1)];
+  const pad=extra&&extra._pad, hs=(extra&&extra._heights)||(pad?[64,100]:[90,130]); extra=extra?{...extra}:null;
+  if(extra){ delete extra._heights; delete extra._pad; if(!Object.keys(extra).length) extra=null; }
+  const imgs=pad? hs.map(h=>cropLine(src,line.bbox,k,h,pad[0],pad[1]))
+                : hs.map((h,i)=>i%2? cropLine(src,line.bbox,k,h,.8,.45) : cropLine(src,line.bbox,k,h)), B=imgs[Math.min(1,imgs.length-1)];
   await w.setParameters({tessedit_pageseg_mode:'7',...(extra||{})});
   for(const c of imgs){ const d=(await w.recognize(c,{},{blocks:true,text:true})).data; cands.push({text:d.text.trim(), conf:d.confidence||0, words:linesOf(d).flatMap(l=>l.words||[])}); }
   await w.setParameters({tessedit_pageseg_mode:'3',...(extra?{tessedit_char_whitelist:''}:{})});
@@ -608,7 +611,7 @@ async function runOCR(src){
     const nameL=findNameLine(lines);
     if(nameL){
       const wt=await getWorkerTha();
-      const r=await readLine(wt,src,nameL,k,{_heights:[56,80,110,140]}); crops.name=r.img;
+      const r=await readLine(wt,src,nameL,k,{_heights:[80,110,150,190]}); crops.name=r.img;
       const p1=readLineCand(nameL);   // ผลรอบแรก (tha+eng)
       // โหวตแยก "นามสกุล" และ "ชื่อ": ผลจากภาพความละเอียดเต็มนับ 1 เสียง ผลรอบแรก (ภาพย่อ) นับครึ่งเสียง
       const cands=[...r.all.map(c=>({...c,wt:1})),{...p1,wt:.5}].map(c=>({...c,nm:nameFromWords(c.words)||nameFromText(c.text)})).filter(c=>c.nm);
@@ -627,9 +630,10 @@ async function runOCR(src){
     }
     const ai=lines.findIndex(l=>/ที่อยู่|ทีอยู่/.test(t(l)));
     if(ai>=0){
-      const a1=await readLine(w,src,lines[ai],k); let txt=a1.text; crops.addr=[a1.img];
+      const AP={_pad:[.25,.2]};
+      const a1=await readLine(w,src,lines[ai],k,{...AP}); let txt=a1.text; crops.addr=[a1.img];
       const nx=lines[ai+1];
-      if(nx && !/ออกบัตร|Issue|หมดอายุ|Expiry/i.test(nx.text)){ const a2=await readLine(w,src,nx,k); txt+=' '+a2.text; crops.addr.push(a2.img); }
+      if(nx && !/ออกบัตร|Issue|หมดอายุ|Expiry/i.test(nx.text)){ const a2=await readLine(w,src,nx,k,{...AP}); txt+=' '+a2.text; crops.addr.push(a2.img); }
       const p=parseAddr(cleanThai(txt).replace(/.*?(ที่อยู่|ทีอยู่)\s*/,''));
       for(const [kk,v] of Object.entries(p)) if(v) o[kk]=v;
     }
