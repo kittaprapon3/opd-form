@@ -640,6 +640,27 @@ async function snapAddr(o){
   }
   if(P) o.a_prov=P; if(A) o.a_amphoe=A;
 }
+
+/* ตรวจตัวอักษรแรกของชื่อไทยกับชื่อภาษาอังกฤษบนบัตร (Name / Last name) — ถ้าตัวแรกไม่เข้ากัน แต่ตัวถัดไปเข้ากัน
+   แปลว่ามีตัวอักษรเกินมาจากคำนำหน้าที่อ่านเพี้ยน (เช่น "อกัญญ์ณัฏฐ์" + Kanyanat -> "กัญญ์ณัฏฐ์") */
+const ROMAN=[['kh','ขฃคฅฆ'],['ch','จฉชฌ'],['th','ฐฑฒถทธ'],['ph','ผพภ'],['ng','ง'],['k','กขคฆ'],['c','จฉช'],['j','จ'],['s','ซศษสฉช'],['t','ฏตทถ'],
+  ['p','ปพผ'],['b','บ'],['d','ดฎ'],['f','ฝฟ'],['h','หฮ'],['l','ลฬ'],['m','ม'],['n','นณ'],['r','ร'],['w','ว'],['y','ยญ'],['v','ว'],['z','ซ'],
+  ['a','อ'],['e','อ'],['i','อ'],['o','อ'],['u','อ']];
+function okInitial(thai,eng){
+  const c=(thai.match(/^[เแโใไ]?([ก-ฮ])/)||[])[1]; if(!c||!eng) return null;
+  const e=eng.toLowerCase(); const r=ROMAN.find(([k])=>e.startsWith(k)); if(!r) return null;
+  return r[1].includes(c);
+}
+function fixInitial(thai,eng){
+  if(!thai||!eng||okInitial(thai,eng)!==false) return thai;
+  for(let cut=1;cut<=2&&cut<thai.length-1;cut++){ const t=thai.slice(cut); if(okInitial(t,eng)) return t; }
+  return thai;
+}
+function engNames(text){
+  const f=(text.match(/Name\W{0,3}(?:Mr|Mrs|Miss|Ms|Master)\.?\s+([A-Za-z]{2,})/i)||[])[1];
+  const l=(text.match(/Last\s*name\W{0,3}([A-Za-z]{2,})/i)||[])[1];
+  return {f,l};
+}
 async function runOCR(src){
   status('กำลังเตรียมระบบอ่านบัตร... (ครั้งแรกอาจใช้เวลาสักครู่)');
   try{
@@ -664,7 +685,7 @@ async function runOCR(src){
       if(window.OCR_DEBUG) window.__ocrDebug={line:nameL.text,cands:cands.map(c=>({t:c.text,conf:Math.round(c.conf),nm:c.nm}))};
       const ln=vote(cands.filter(c=>(c.conf||0)>=60),'lname');   // ผลที่ระบบไม่มั่นใจ ไม่นำมาใส่
       if(ln){ let same=cands.filter(c=>c.nm.lname===ln.x&&(c.conf||0)>=70); if(!same.length) same=cands.filter(c=>c.nm.lname===ln.x); const fn=vote(same,'fname');
-        o.fname=fn.x; o.lname=ln.x; const sx=same.find(c=>c.nm.sex); if(sx) o.sex=sx.nm.sex; }
+        const en=engNames(data.text); o.fname=fixInitial(fn.x,en.f); o.lname=fixInitial(ln.x,en.l); const sx=same.find(c=>c.nm.sex); if(sx) o.sex=sx.nm.sex; }
     }
     if(!o.cid || !validCID(o.cid)){   // อ่านเลขบัตรซ้ำแบบรับเฉพาะตัวเลข
       const cl=lines.find(l=>(l.text.match(/\d/g)||[]).length>=9);
