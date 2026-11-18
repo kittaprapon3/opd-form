@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>เจ้าหน้าที่ — คำขอมีเวชระเบียนผู้ป่วยนอก</title>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="form-sheet.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
+<script src="config.js"></script>
+<script src="form-sheet.js"></script>
+<style>
+  :root{--navy:#0b2e59;--line:#d5dde8;--bg:#f3f6fa;--accent:#1d5fbf;--err:#c0392b;--ok:#0f7a4a}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'Sarabun',Tahoma,sans-serif;background:var(--bg);color:#1b2430;font-size:15px}
+  header{background:var(--navy);color:#fff;padding:10px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  header h1{font-size:17px;margin:0;flex:1}
+  header .who{font-size:13px;opacity:.85}
+  button,select,input{font:inherit}
+  button{border:0;border-radius:7px;padding:8px 14px;cursor:pointer;font-weight:600}
+  .primary{background:var(--accent);color:#fff}.ghost{background:#e7edf5;color:var(--navy)}.okb{background:var(--ok);color:#fff}
+  header .ghost{background:rgba(255,255,255,.15);color:#fff}
+  input,select,textarea{padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:#fff}
+  main{padding:14px 16px;max-width:1400px;margin:0 auto}
+  .msg{padding:10px 12px;border-radius:8px;margin:10px 0;display:none}
+  .msg.err{display:block;background:#fdeeee;color:#8c2a22;border:1px solid #f1c0bd}
+  .msg.info{display:block;background:#eef4fd;color:#1b3c70;border:1px solid #c7d6ef}
+
+  /* login */
+  #login{max-width:380px;margin:60px auto;background:#fff;border:1px solid var(--line);border-radius:12px;padding:24px}
+  #login h2{margin:0 0 4px;color:var(--navy);font-size:20px}
+  #login label{display:block;font-weight:600;margin:12px 0 4px;font-size:14px}
+  #login input{width:100%}
+  #login button{width:100%;margin-top:16px;padding:11px}
+
+  /* list */
+  .filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+  .filters input[type=search]{flex:1;min-width:220px}
+  .stats{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+  .stat{background:#fff;border:1px solid var(--line);border-radius:8px;padding:6px 12px;font-size:14px}
+  .stat b{font-size:18px;margin-left:4px}
+  table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  th,td{padding:9px 10px;text-align:left;border-bottom:1px solid #edf1f6;white-space:nowrap}
+  th{background:#f0f4fa;font-size:13px;color:#43597a;position:sticky;top:0}
+  tbody tr{cursor:pointer}
+  tbody tr:hover{background:#f6f9ff}
+  tr.new td:first-child{box-shadow:inset 4px 0 0 #f0a500}
+  td.name{white-space:normal;min-width:180px}
+  .mono{font-family:ui-monospace,Consolas,monospace;font-size:13.5px}
+  .st{display:inline-block;padding:2px 9px;border-radius:20px;font-size:13px;font-weight:600}
+  .st0{background:#fff4d6;color:#8a6500}.st1{background:#e3f6ea;color:#0d5c33}.st2{background:#fde8e6;color:#8c2a22}.st3{background:#eceff3;color:#5b6b80}
+  .empty{text-align:center;color:#7a8aa3;padding:30px}
+  .tablewrap{overflow:auto;max-height:calc(100vh - 230px);border-radius:10px}
+
+  /* detail */
+  #detail{position:fixed;inset:0;background:rgba(10,25,50,.55);display:none;z-index:20;overflow:auto}
+  .dbox{background:var(--bg);max-width:1180px;margin:16px auto;border-radius:12px;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .dside{flex:1 1 300px;min-width:280px;display:flex;flex-direction:column;gap:10px}
+  .dside .card{background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px}
+  .dside h3{margin:0 0 6px;font-size:17px;color:var(--navy)}
+  .dside label{display:block;font-size:13px;font-weight:600;margin:8px 0 3px}
+  .dside input,.dside select,.dside textarea{width:100%}
+  .kv{display:grid;grid-template-columns:110px 1fr;gap:3px 8px;font-size:14px}
+  .kv div:nth-child(odd){color:#5b6b80}
+  .dsheet{flex:0 0 auto}
+  .btnrow{display:flex;gap:8px;flex-wrap:wrap}
+  .meta{font-size:12.5px;color:#7a8aa3}
+
+  @media print{
+    body{background:#fff}
+    body>*:not(#detail),.dside,.noprint{display:none!important}
+    #detail{position:static;display:block!important;background:#fff;overflow:visible}
+    .dbox{display:block;margin:0;padding:0;background:#fff}
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>คำขอมีเวชระเบียนผู้ป่วยนอก — เจ้าหน้าที่</h1>
+  <span class="who" id="who"></span>
+  <button class="ghost" id="logout" style="display:none">ออกจากระบบ</button>
+</header>
+
+<div id="cfgErr" class="msg" style="max-width:600px;margin:30px auto"></div>
+
+<div id="login" style="display:none">
+  <h2>เข้าสู่ระบบเจ้าหน้าที่</h2>
+  <div class="meta">ใช้บัญชีที่ผู้ดูแลระบบสร้างให้</div>
+  <form id="lf">
+    <label>อีเมล</label><input type="email" id="email" autocomplete="username" required>
+    <label>รหัสผ่าน</label><input type="password" id="pw" autocomplete="current-password" required>
+    <button class="primary" type="submit" id="lbtn">เข้าสู่ระบบ</button>
+  </form>
+  <div class="msg" id="lmsg"></div>
+</div>
+
+<main id="app" style="display:none">
+  <div class="filters">
+    <input type="date" id="day">
+    <select id="fStatus">
+      <option value="">ทุกสถานะ</option>
+      <option>รอดำเนินการ</option><option>ออก HN แล้ว</option><option>ข้อมูลไม่ครบ/ติดต่อกลับ</option><option>ยกเลิก</option>
+    </select>
+    <input type="search" id="q" placeholder="ค้นหา เลขที่คำขอ / ชื่อ / เลขบัตร / เบอร์โทร (ค้นทุกวัน)">
+    <button class="ghost" id="refresh">↻ รีเฟรช</button>
+    <button class="okb" id="export">⬇ Excel</button>
+  </div>
+  <div class="stats" id="stats"></div>
+  <div class="msg" id="amsg"></div>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>เลขที่คำขอ</th><th>เวลา</th><th>ยศ-ชื่อ-สกุล</th><th>เลขบัตรประชาชน</th><th>โทรศัพท์</th><th>สถานะ</th><th>HN</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+  <div class="meta" style="margin-top:6px">อัปเดตอัตโนมัติทุก 30 วินาที · <span id="lastUpd"></span></div>
+</main>
+
+<div id="detail">
+  <div class="dbox">
+    <div class="dside">
+      <div class="card">
+        <div class="btnrow noprint" style="justify-content:space-between">
+          <h3 id="dRef"></h3>
+          <button class="ghost" id="dClose">✕ ปิด</button>
+        </div>
+        <div class="kv" id="dKv"></div>
+      </div>
+      <div class="card">
+        <label>HN</label><input type="text" id="dHn" maxlength="30">
+        <label>สถานะ</label>
+        <select id="dStatus"><option>รอดำเนินการ</option><option>ออก HN แล้ว</option><option>ข้อมูลไม่ครบ/ติดต่อกลับ</option><option>ยกเลิก</option></select>
+        <label>หมายเหตุ</label><textarea id="dNote" rows="2" maxlength="500"></textarea>
+        <div class="btnrow" style="margin-top:10px">
+          <button class="primary" id="dSave">บันทึก</button>
+          <span class="meta" id="dSaved"></span>
+        </div>
+      </div>
+      <div class="card btnrow">
+        <button class="okb" id="dPrint">🖨 พิมพ์แบบฟอร์ม</button>
+        <button class="ghost" id="dPdf">⬇ PDF</button>
+      </div>
+      <div class="meta" id="dMeta"></div>
+    </div>
+    <div class="dsheet">
+      <div class="sheetwrap" id="dWrap"><div class="sheet"><img src="form-bg.png" style="position:absolute;inset:0;width:100%;height:100%" alt=""><div id="dSheet" style="position:absolute;inset:0"></div></div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const CFG=window.APP_CONFIG||{}, $=s=>document.querySelector(s), esc=FormSheet.esc;
+const STATUS=['รอดำเนินการ','ออก HN แล้ว','ข้อมูลไม่ครบ/ติดต่อกลับ','ยกเลิก'];
+const stBadge=s=>`<span class="st st${Math.max(0,STATUS.indexOf(s))}">${esc(s)}</span>`;
+const fmtCID=c=>{const d=String(c||'').replace(/\D/g,'');return d.length===13?`${d[0]}-${d.slice(1,5)}-${d.slice(5,10)}-${d.slice(10,12)}-${d[12]}`:d;};
+const tm=t=>new Date(t).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});
+const dt=t=>new Date(t).toLocaleString('th-TH',{day:'numeric',month:'short',year:'2-digit',hour:'2-digit',minute:'2-digit'});
+function msg(el,text,kind){ el.className='msg'+(text?' '+(kind||'err'):''); el.textContent=text||''; }
+
+let sb=null, rows=[], seen=new Set(), timer=null, cur=null;
+
+/* ---------- เริ่มต้น ---------- */
+(async function init(){
+  if(!CFG.SUPABASE_URL||!CFG.SUPABASE_ANON_KEY||!window.supabase){
+    msg($('#cfgErr'),'ยังไม่ได้ตั้งค่า SUPABASE_URL / SUPABASE_ANON_KEY ในไฟล์ config.js'); return;
+  }
+  sb=window.supabase.createClient(CFG.SUPABASE_URL,CFG.SUPABASE_ANON_KEY);
+  const today=new Date(Date.now()+7*3600e3).toISOString().slice(0,10);   // วันที่ตามเวลาไทย
+  $('#day').value=today;
+  const {data:{session}}=await sb.auth.getSession();
+  session?enter(session):showLogin();
+  sb.auth.onAuthStateChange((ev,s)=>{ if(ev==='SIGNED_OUT') showLogin(); });
+})();
+
+function showLogin(){ clearInterval(timer); $('#app').style.display='none'; $('#login').style.display='block'; $('#logout').style.display='none'; $('#who').textContent=''; }
+$('#lf').onsubmit=async e=>{
+  e.preventDefault(); $('#lbtn').disabled=true; msg($('#lmsg'),'');
+  const {data,error}=await sb.auth.signInWithPassword({email:$('#email').value.trim(),password:$('#pw').value});
+  $('#lbtn').disabled=false;
+  if(error) return msg($('#lmsg'),'เข้าสู่ระบบไม่สำเร็จ: อีเมลหรือรหัสผ่านไม่ถูกต้อง');
+  $('#pw').value=''; enter(data.session);
+};
+$('#logout').onclick=()=>sb.auth.signOut();
+
+async function enter(session){
+  const {data:ok}=await sb.rpc('is_staff');
+  if(!ok){ await sb.auth.signOut(); showLogin(); return msg($('#lmsg'),'บัญชีนี้ไม่มีสิทธิ์เข้าหน้าเจ้าหน้าที่ กรุณาติดต่อผู้ดูแลระบบ'); }
+  $('#login').style.display='none'; $('#app').style.display='block'; $('#logout').style.display='';
+  $('#who').textContent=session.user.email;
+  await load(true);
+  clearInterval(timer); timer=setInterval(()=>{ if($('#detail').style.display!=='block') load(); },30000);
+}
+
+/* ---------- รายการ ---------- */
+let qTimer=null;
+$('#q').oninput=()=>{clearTimeout(qTimer);qTimer=setTimeout(()=>load(true),350);};
+$('#day').onchange=$('#fStatus').onchange=()=>load(true);
+$('#refresh').onclick=()=>load();
+
+function dayRange(d){ const s=new Date(d+'T00:00:00+07:00'); return [s.toISOString(), new Date(+s+864e5).toISOString()]; }
+function baseQuery(cols){
+  let q=sb.from('requests').select(cols).order('created_at',{ascending:false}).limit(500);
+  const term=$('#q').value.trim().replace(/[,()*%\\]/g,' ').trim();
+  if(term){
+    const digits=term.replace(/\D/g,'');
+    const ors=[`ref.ilike.*${term}*`,`fullname.ilike.*${term}*`,`phone.ilike.*${term}*`,`hn.ilike.*${term}*`];
+    if(digits.length>=4) ors.push(`cid.ilike.*${digits}*`);
+    q=q.or(ors.join(','));
+  }else{
+    const [a,b]=dayRange($('#day').value); q=q.gte('created_at',a).lt('created_at',b);
+  }
+  if($('#fStatus').value) q=q.eq('status',$('#fStatus').value);
+  return q;
+}
+async function load(reset){
+  const {data,error}=await baseQuery('id,ref,created_at,status,hn,note,cid,fullname,phone');
+  if(error){ if(/JWT|auth/i.test(error.message)) return showLogin(); return msg($('#amsg'),'โหลดข้อมูลไม่สำเร็จ: '+error.message); }
+  msg($('#amsg'),'');
+  const fresh=reset?new Set():new Set(data.filter(r=>seen.size&&!seen.has(r.id)).map(r=>r.id));
+  data.forEach(r=>seen.add(r.id));
+  rows=data;
+  $('#rows').innerHTML=rows.length?rows.map(r=>`<tr data-id="${r.id}" class="${fresh.has(r.id)?'new':''}">
+      <td class="mono"><b>${esc(r.ref)}</b></td><td>${$('#q').value.trim()?dt(r.created_at):tm(r.created_at)}</td>
+      <td class="name">${esc(r.fullname)}</td><td class="mono">${fmtCID(r.cid)}</td><td class="mono">${esc(r.phone||'')}</td>
+      <td>${stBadge(r.status)}</td><td class="mono">${esc(r.hn||'')}</td></tr>`).join('')
+    :`<tr><td colspan="7" class="empty">ไม่มีคำขอ</td></tr>`;
+  const c=s=>rows.filter(r=>r.status===s).length;
+  $('#stats').innerHTML=`<div class="stat">ทั้งหมด<b>${rows.length}</b></div>`+STATUS.map(s=>`<div class="stat">${stBadge(s)}<b>${c(s)}</b></div>`).join('');
+  $('#lastUpd').textContent='ล่าสุด '+new Date().toLocaleTimeString('th-TH');
+  if(fresh.size){ document.title=`(${fresh.size}) คำขอใหม่`; setTimeout(()=>document.title='เจ้าหน้าที่ — คำขอมีเวชระเบียนผู้ป่วยนอก',8000); }
+}
+$('#rows').onclick=e=>{ const tr=e.target.closest('tr[data-id]'); if(tr) openDetail(tr.dataset.id); };
+
+/* ---------- รายละเอียด ---------- */
+let curItems=[];
+async function openDetail(id){
+  const {data:r,error}=await sb.from('requests').select('*').eq('id',id).single();
+  if(error) return msg($('#amsg'),'เปิดข้อมูลไม่สำเร็จ: '+error.message);
+  cur=r; const d=r.data||{};
+  $('#dRef').textContent='เลขที่คำขอ '+r.ref;
+  const addr=[d.a_no,d.a_moo&&'ม.'+d.a_moo,d.a_soi&&'ซ.'+d.a_soi,d.a_road&&'ถ.'+d.a_road,d.a_tambon&&'ต.'+d.a_tambon,d.a_amphoe&&'อ.'+d.a_amphoe,d.a_prov&&'จ.'+d.a_prov].filter(Boolean).join(' ');
+  const kv=[['ชื่อ',r.fullname],['เลขบัตร',fmtCID(r.cid)],['เพศ/อายุ',`${d.sex||''} ${d.age?d.age+' ปี':''}`],['วันเกิด',FormSheet.thDate(d.dob)],
+    ['โทร',r.phone],['ที่อยู่',addr],['แพ้ยา',d.allergy==='แพ้'?`แพ้ ${d.drug||''} (${d.reaction||''})`:d.allergy],['โรคประจำตัว',d.disease],['ส่งเมื่อ',dt(r.created_at)]];
+  $('#dKv').innerHTML=kv.map(([k,v])=>`<div>${k}</div><div>${esc(v||'-')}</div>`).join('');
+  $('#dHn').value=r.hn||''; $('#dStatus').value=r.status; $('#dNote').value=r.note||''; $('#dSaved').textContent='';
+  $('#dMeta').textContent=r.updated_at?`แก้ไขล่าสุด ${dt(r.updated_at)} โดย ${r.updated_by||'-'}`:'';
+  drawSheet();
+  $('#detail').style.display='block'; $('#detail').scrollTop=0;
+}
+function drawSheet(){
+  const d={...(cur.data||{}), cid:cur.cid, hn:$('#dHn').value.trim()};
+  curItems=FormSheet.layout(d,new Date(cur.created_at),CFG.UNIT_NAME||'');
+  $('#dSheet').innerHTML=FormSheet.html(curItems);
+  const w=Math.min(window.innerWidth-48, 794);
+  FormSheet.fit($('#dWrap'),$('#dWrap .sheet'),w);
+}
+$('#dHn').oninput=drawSheet;
+$('#dClose').onclick=()=>{ $('#detail').style.display='none'; cur=null; };
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&cur) $('#dClose').click(); });
+$('#dSave').onclick=async()=>{
+  const b=$('#dSave'); b.disabled=true;
+  const upd={hn:$('#dHn').value.trim()||null,status:$('#dStatus').value,note:$('#dNote').value.trim()||null};
+  if(upd.status==='ออก HN แล้ว'&&!upd.hn){ b.disabled=false; return $('#dSaved').textContent='กรุณาใส่ HN ก่อน'; }
+  const {error}=await sb.from('requests').update(upd).eq('id',cur.id);
+  b.disabled=false;
+  if(error) return $('#dSaved').textContent='บันทึกไม่สำเร็จ: '+error.message;
+  Object.assign(cur,upd); $('#dSaved').textContent='บันทึกแล้ว ✓'; load();
+};
+$('#dPrint').onclick=()=>window.print();
+$('#dPdf').onclick=async()=>{
+  const b=$('#dPdf'); b.disabled=true;
+  try{ (await FormSheet.pdf(curItems)).save(`${cur.ref}_${(cur.fullname||'').replace(/[\\/:*?"<>|\s]+/g,'_')}.pdf`); }
+  catch(e){ alert('สร้าง PDF ไม่สำเร็จ: '+e.message); }
+  b.disabled=false;
+};
+
+/* ---------- Export Excel (CSV UTF-8) ---------- */
+$('#export').onclick=async()=>{
+  const {data,error}=await baseQuery('ref,created_at,status,hn,note,cid,fullname,phone,data');
+  if(error) return msg($('#amsg'),'Export ไม่สำเร็จ: '+error.message);
+  const F=[['ref','เลขที่คำขอ'],['created_at','วันเวลาที่ส่ง'],['status','สถานะ'],['hn','HN'],['note','หมายเหตุ'],['fullname','ยศ-ชื่อ-สกุล'],['rank','ยศ/คำนำหน้า'],['fname','ชื่อ'],['lname','นามสกุล'],
+    ['sex','เพศ'],['dob','วันเกิด'],['age','อายุ'],['cid','เลขบัตรประชาชน'],['unit','สังกัด'],['occupation','อาชีพ'],['religion','ศาสนา'],['marital','สถานะสมรส'],['goldcard','บัตรทอง ท/R'],['conscript','ผลัด/ปี'],
+    ['a_no','บ้านเลขที่'],['a_moo','หมู่'],['a_soi','ซอย'],['a_road','ถนน'],['a_tambon','ตำบล'],['a_amphoe','อำเภอ'],['a_prov','จังหวัด'],
+    ['c_no','ปัจจุบัน-บ้านเลขที่'],['c_moo','ปัจจุบัน-หมู่'],['c_soi','ปัจจุบัน-ซอย'],['c_road','ปัจจุบัน-ถนน'],['c_tambon','ปัจจุบัน-ตำบล'],['c_amphoe','ปัจจุบัน-อำเภอ'],['c_prov','ปัจจุบัน-จังหวัด'],
+    ['phone','โทรศัพท์'],['blood','หมู่เลือด'],['rh','Rh'],['allergy','แพ้ยา'],['drug','ยาที่แพ้'],['reaction','อาการที่แพ้'],['disease','โรคประจำตัว'],
+    ['ec_name','ผู้ติดต่อ'],['ec_rel','เกี่ยวข้องเป็น'],['ec_addr','ที่อยู่ผู้ติดต่อ'],['ec_phone','เบอร์ผู้ติดต่อ'],['signerRole','ผู้ลงชื่อ'],['signerRel','ความสัมพันธ์']];
+  const asText=v=>v?'"=""'+String(v).replace(/[^\d+\-# ]/g,'')+'"""':'""';
+  const cell=v=>{ v=v==null?'':String(v); if(/^[=+\-@]/.test(v)) v="'"+v; return '"'+v.replace(/"/g,'""')+'"'; };
+  const lines=[F.map(f=>cell(f[1])).join(',')];
+  for(const r of data){ const d=r.data||{};
+    lines.push(F.map(([k])=>{
+      if(k==='created_at') return cell(dt(r.created_at));
+      if(k==='cid') return asText(r.cid);                              // กัน Excel แปลงเป็นตัวเลข/ตัดเลข 0
+      if(k==='phone'||k==='ec_phone') return asText(r[k]??d[k]);
+      if(k==='dob') return cell(FormSheet.thDate(d.dob));
+      return cell(r[k]!==undefined&&k in r?r[k]:d[k]);
+    }).join(','));
+  }
+  const blob=new Blob(['﻿'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download=`คำขอเวชระเบียน_${$('#q').value.trim()?'ค้นหา':$('#day').value}.csv`; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+};
+window.addEventListener('resize',()=>{ if(cur) drawSheet(); });
+</script>
+</body>
+</html>

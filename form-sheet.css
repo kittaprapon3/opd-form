@@ -1,0 +1,12 @@
+/* แบบฟอร์มหน้า 12 (ต้นฉบับ) + ข้อมูลที่วางทับ — ใช้ร่วมกันระหว่างหน้าคนไข้และหน้าเจ้าหน้าที่ */
+.sheetwrap{margin:16px auto;overflow:hidden}
+.sheet{width:595.22pt;height:842pt;position:relative;background:#fff;transform-origin:0 0;box-shadow:0 2px 12px rgba(0,0,0,.2)}
+.v{position:absolute;height:15pt;line-height:15pt;font-size:11.5pt;font-weight:600;color:#0a2a8a;white-space:nowrap;overflow:hidden;padding-left:3pt;font-family:'Sarabun',Tahoma,sans-serif}
+.ck{position:absolute;width:9.6pt;height:9.6pt;font-size:11pt;line-height:9pt;text-align:center;font-weight:700;color:#0a2a8a}
+.idc{position:absolute;width:14.4pt;text-align:center;font-size:12pt;font-weight:700;color:#0a2a8a;height:15pt;line-height:15pt}
+.sigimg{position:absolute;object-fit:contain}
+@media print{
+  @page{size:A4;margin:0}
+  .sheetwrap{margin:0!important;width:auto!important;height:auto!important;box-shadow:none}
+  .sheet{transform:none!important;box-shadow:none;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
