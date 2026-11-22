@@ -68,9 +68,16 @@
   .btnrow{display:flex;gap:8px;flex-wrap:wrap}
   .meta{font-size:12.5px;color:#7a8aa3}
 
+  .egrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px 10px}
+  .egrid h4{grid-column:1/-1;margin:8px 0 0;color:var(--navy);font-size:14.5px;border-bottom:1px solid var(--line);padding-bottom:3px}
+  .egrid label{display:block;font-size:12.5px;font-weight:600;color:#43597a;margin:0 0 2px}
+  .egrid input,.egrid select{width:100%;padding:6px 8px}
+  .egrid .w2{grid-column:span 2}.egrid .w4{grid-column:1/-1}
+  .egrid .chg input,.egrid .chg select{background:#fff8d6;border-color:#e0b100}
+  @media(max-width:700px){.egrid{grid-template-columns:repeat(2,1fr)}}
   @media print{
     body{background:#fff}
-    body>*:not(#detail),.dside,.noprint,#nameDlg{display:none!important}
+    body>*:not(#detail),.dside,.noprint,#nameDlg,#editDlg{display:none!important}
     #detail{position:static;display:block!important;background:#fff;overflow:visible}
     .dbox{display:block;margin:0;padding:0;background:#fff}
   }
@@ -141,6 +148,7 @@
         </div>
       </div>
       <div class="card btnrow">
+        <button class="ghost" id="dEdit">✎ แก้ไขข้อมูลคนไข้</button>
         <button class="okb" id="dPrint">🖨 พิมพ์แบบฟอร์ม</button>
         <button class="ghost" id="dPdf">⬇ PDF</button>
       </div>
@@ -153,6 +161,21 @@
 </div>
 
 
+
+<div id="editDlg" class="noprint" style="position:fixed;inset:0;background:rgba(10,25,50,.55);display:none;z-index:45;overflow:auto">
+  <div style="background:#fff;border-radius:12px;padding:18px;max-width:900px;margin:20px auto">
+    <div class="btnrow" style="justify-content:space-between;align-items:center">
+      <h3 style="margin:0;color:var(--navy)">แก้ไขข้อมูลคนไข้ <span id="eRef" class="meta"></span></h3>
+      <button class="ghost" id="eClose">✕ ปิด</button>
+    </div>
+    <div class="meta" style="margin:4px 0 10px">ลายเซ็นของคนไข้แก้ไม่ได้ · ทุกการแก้ไขจะบันทึกว่าใครแก้ ช่องไหน จากค่าเดิมอะไร</div>
+    <div id="eForm" class="egrid"></div>
+    <div class="msg" id="eMsg"></div>
+    <div class="btnrow" style="margin-top:12px;justify-content:flex-end">
+      <button class="ghost" id="eCancel">ยกเลิก</button><button class="primary" id="eSave">💾 บันทึกการแก้ไข</button>
+    </div>
+  </div>
+</div>
 <div id="nameDlg" class="noprint" style="position:fixed;inset:0;background:rgba(10,25,50,.55);display:none;z-index:40;align-items:center;justify-content:center">
   <div style="background:#fff;border-radius:12px;padding:20px;width:min(420px,92vw)">
     <h3 style="margin:0 0 4px;color:var(--navy)">ชื่อผู้พิมพ์</h3>
@@ -274,7 +297,7 @@ async function openDetail(id){
     ['โทร',r.phone],['ที่อยู่',addr],['แพ้ยา',d.allergy==='แพ้'?`แพ้ ${d.drug||''} (${d.reaction||''})`:d.allergy],['โรคประจำตัว',d.disease],['ส่งเมื่อ',dt(r.created_at)]];
   $('#dKv').innerHTML=kv.map(([k,v])=>`<div>${k}</div><div>${esc(v||'-')}</div>`).join('');
   $('#dHn').value=r.hn||''; $('#dStatus').value=r.status; $('#dNote').value=r.note||''; $('#dSaved').textContent='';
-  $('#dMeta').textContent=[r.updated_at?`แก้ไขล่าสุด ${dt(r.updated_at)} โดย ${r.updated_by||'-'}`:'', r.printed_at?`พิมพ์แล้ว ${r.print_count} ครั้ง ล่าสุด ${dt(r.printed_at)} โดย ${r.printed_by||'-'}`:''].filter(Boolean).join(' · ');
+  $('#dMeta').textContent=[r.updated_at?`แก้ไขล่าสุด ${dt(r.updated_at)} โดย ${r.updated_by||'-'}`:'', r.printed_at?`พิมพ์แล้ว ${r.print_count} ครั้ง ล่าสุด ${dt(r.printed_at)} โดย ${r.printed_by||'-'}`:'', (r.edit_log&&r.edit_log.length)?`แก้ข้อมูลคนไข้ ${r.edit_log.length} ครั้ง ล่าสุด ${dt(r.edit_log[r.edit_log.length-1].at)} โดย ${r.edit_log[r.edit_log.length-1].by||'-'} (${Object.keys(r.edit_log[r.edit_log.length-1].changes||{}).length} ช่อง)`:''].filter(Boolean).join(' · ');
   curTpl=await FormSheet.loadTemplate(sb,(r.data||{}).template_id);   // พิมพ์ด้วยแบบฟอร์มฉบับที่คนไข้กรอกตอนส่ง
   drawSheet();
   $('#detail').style.display='block'; $('#detail').scrollTop=0;
@@ -295,7 +318,7 @@ function drawSheet(){
 }
 $('#dHn').oninput=drawSheet;
 $('#dClose').onclick=()=>{ $('#detail').style.display='none'; cur=null; };
-document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&cur) $('#dClose').click(); });
+document.addEventListener('keydown',e=>{ if(e.key!=='Escape') return; if($('#editDlg').style.display==='block') return closeEdit(); if(cur) $('#dClose').click(); });
 $('#dSave').onclick=async()=>{
   const b=$('#dSave'); b.disabled=true;
   const upd={hn:$('#dHn').value.trim()||null,status:$('#dStatus').value,note:$('#dNote').value.trim()||null};
@@ -315,6 +338,51 @@ $('#dPdf').onclick=async()=>{
   b.disabled=false;
 };
 
+
+/* ---------- แก้ไขข้อมูลคนไข้ในคำขอ ---------- */
+const EF=[ ['h','ข้อมูลผู้รับบริการ'],
+  ['rank','ยศ/คำนำหน้า'],['fname','ชื่อ'],['lname','นามสกุล'],['sex','เพศ',['','ชาย','หญิง']],
+  ['dob','วันเกิด','date'],['unit','สังกัด'],['occupation','อาชีพ'],['religion','ศาสนา'],
+  ['marital','สถานะ',['','โสด','คู่','หม้าย','หย่า','สมณะ']],['cid','เลขบัตรประชาชน',null,'w2'],['phone','โทรศัพท์'],
+  ['goldcard','บัตรทอง ท/R'],['conscript','ผลัด/ปี'],
+  ['h','ที่อยู่ตามบัตรประชาชน'],['a_no','บ้านเลขที่'],['a_moo','หมู่'],['a_soi','ซอย'],['a_road','ถนน'],['a_tambon','ตำบล'],['a_amphoe','อำเภอ'],['a_prov','จังหวัด'],
+  ['h','ที่อยู่ปัจจุบัน (เว้นว่าง = ตามบัตร)'],['c_no','บ้านเลขที่'],['c_moo','หมู่'],['c_soi','ซอย'],['c_road','ถนน'],['c_tambon','ตำบล'],['c_amphoe','อำเภอ'],['c_prov','จังหวัด'],
+  ['h','ข้อมูลสุขภาพ'],['blood','หมู่เลือด',['','เอ','บี','เอบี','โอ','ไม่ทราบ']],['rh','Rh',['','บวก','ลบ','ไม่ทราบ']],
+  ['allergy','แพ้ยา',['','ไม่มีประวัติแพ้','ไม่ทราบ','แพ้']],['drug','ยาที่แพ้'],['reaction','อาการที่แพ้'],['disease','โรคประจำตัว',null,'w2'],
+  ['h','ผู้ที่ติดต่อได้'],['ec_name','ชื่อ-สกุล',null,'w2'],['ec_rel','เกี่ยวข้องเป็น'],['ec_phone','เบอร์โทร'],['ec_addr','ที่อยู่',null,'w4'],
+  ['h','ผู้ลงชื่อ'],['signerRole','ผู้ลงชื่อเป็น',['ผู้ป่วย','ผู้ให้ข้อมูล']],['signerRel','ความสัมพันธ์'] ];
+let eOrig=null;
+function joinName(r,f,l){ r=(r||'').trim(); const en=/^(Mr|Mrs|Miss|Ms|Master)\.?$/i.test(r); return ((r?(r.endsWith('.')&&!en?r:r+' '):'')+(f||'').trim()+' '+(l||'').trim()).trim(); }
+function validCID(s){const d=String(s||'').replace(/\D/g,'');if(d.length!==13)return false;let t=0;for(let i=0;i<12;i++)t+=+d[i]*(13-i);return (11-t%11)%10===+d[12];}
+$('#dEdit').onclick=()=>{
+  const d={...(cur.data||{}),cid:cur.cid}; eOrig={};
+  $('#eRef').textContent=cur.ref; msg($('#eMsg'),'');
+  $('#eForm').innerHTML=EF.map(([k,lb,opt,cls])=>{
+    if(k==='h') return `<h4>${lb}</h4>`;
+    const v=k==='cid'?fmtCID(d.cid):(d[k]??''); eOrig[k]=String(v);
+    const inp=Array.isArray(opt)?`<select data-k="${k}">${opt.map(o=>`<option ${o===v?'selected':''} value="${esc(o)}">${esc(o||'-')}</option>`).join('')}</select>`
+      :`<input data-k="${k}" type="${opt==='date'?'date':'text'}" value="${esc(v)}">`;
+    return `<div class="${cls||''}"><label>${lb}</label>${inp}</div>`;
+  }).join('');
+  $('#editDlg').style.display='block';
+};
+$('#eForm').addEventListener('input',e=>{ const el=e.target.closest('[data-k]'); if(el) el.parentElement.classList.toggle('chg',el.value!==eOrig[el.dataset.k]); });
+$('#eForm').addEventListener('change',e=>{ const el=e.target.closest('[data-k]'); if(el) el.parentElement.classList.toggle('chg',el.value!==eOrig[el.dataset.k]); });
+const closeEdit=()=>{ $('#editDlg').style.display='none'; };
+$('#eClose').onclick=$('#eCancel').onclick=closeEdit;
+$('#eSave').onclick=async()=>{
+  const v={}; document.querySelectorAll('#eForm [data-k]').forEach(el=>v[el.dataset.k]=el.value.trim());
+  if(!v.fname||!v.lname) return msg($('#eMsg'),'กรุณากรอกชื่อและนามสกุล');
+  if(!validCID(v.cid)) return msg($('#eMsg'),'เลขบัตรประชาชนไม่ถูกต้อง');
+  v.cid=v.cid.replace(/\D/g,''); v.fullname=joinName(v.rank,v.fname,v.lname);
+  if(v.dob){ const b=new Date(v.dob), n=new Date(cur.created_at); let a=n.getFullYear()-b.getFullYear(); if(n.getMonth()<b.getMonth()||(n.getMonth()===b.getMonth()&&n.getDate()<b.getDate())) a--; if(!isNaN(a)) v.age=String(a); }
+  if(v.allergy!=='แพ้'){ v.drug=''; v.reaction=''; }
+  const b=$('#eSave'); b.disabled=true; b.textContent='กำลังบันทึก...';
+  const {error}=await sb.rpc('update_request_data',{p_id:cur.id,p_data:v});
+  b.disabled=false; b.textContent='💾 บันทึกการแก้ไข';
+  if(error) return msg($('#eMsg'),'บันทึกไม่สำเร็จ: '+error.message);
+  closeEdit(); await openDetail(cur.id); load(); $('#dSaved').textContent='แก้ไขข้อมูลคนไข้แล้ว ✓';
+};
 /* ---------- Export Excel (CSV UTF-8) ---------- */
 $('#export').onclick=async()=>{
   const {data,error}=await baseQuery('ref,created_at,status,hn,note,cid,fullname,phone,data');

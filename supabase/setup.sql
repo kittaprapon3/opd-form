@@ -175,3 +175,11 @@ revoke all on function public.requests_touch() from public, anon, authenticated;
 grant execute on function public.my_profile() to authenticated;
 grant execute on function public.set_my_name(text) to authenticated;
 grant execute on function public.mark_printed(uuid) to authenticated;
+
+-- =====================================================================
+--  (เพิ่มเติม) แบบฟอร์มหลายฉบับ (template) และการแก้ข้อมูลคนไข้โดยเจ้าหน้าที่
+--  ดูรายละเอียดฟังก์ชันใน migration: form_templates, staff_edit_request_data
+-- =====================================================================
+-- form_templates(id, name, source_file, source_page, width_pt, height_pt, bg, fields jsonb, is_active, created_at, created_by)
+--   anon อ่านได้เฉพาะ is_active, เจ้าหน้าที่อ่าน/เพิ่ม/แก้ได้, activate_template(uuid|null)
+-- requests.edit_log jsonb  +  update_request_data(p_id uuid, p_data jsonb)  (แก้ได้เฉพาะช่องข้อมูล ไม่รวมลายเซ็น, บันทึกค่าเดิม-ค่าใหม่)

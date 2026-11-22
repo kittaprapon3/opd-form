@@ -150,7 +150,7 @@ async function loadList(){
      <td class="meta">${t.source_file?esc(t.source_file)+' · หน้า '+t.source_page:'ในระบบ'}</td>
      <td class="meta">${t.created_at?new Date(t.created_at).toLocaleString('th-TH',{dateStyle:'medium',timeStyle:'short'})+' · '+esc(t.created_by||''):'-'}</td>
      <td style="white-space:nowrap">${t.is_active?'':`<button class="okb" data-act="${t.id}">ใช้งาน</button>`}
-       ${t.id==='builtin'?'':`<button class="ghost" data-edit="${t.id}">แก้ไขตำแหน่ง</button>`}</td></tr>`;
+       <button class="ghost" data-edit="${t.id}">แก้ไขตำแหน่ง</button></td></tr>`;
   $('#tplRows').innerHTML=row({id:'builtin',name:FormSheet.BUILTIN.name,is_active:!anyActive})+data.map(row).join('');
 }
 $('#tplRows').onclick=async e=>{
@@ -159,7 +159,12 @@ $('#tplRows').onclick=async e=>{
     const {error}=await sb.rpc('activate_template',{p_id:a==='builtin'?null:a});
     if(error) msg($('#gmsg'),'เปลี่ยนไม่สำเร็จ: '+error.message); else { msg($('#gmsg'),'เปลี่ยนแบบฟอร์มที่ใช้งานแล้ว — คนไข้จะเห็นแบบฟอร์มนี้ตั้งแต่ตอนนี้','ok'); FormSheet._cache={}; }
     loadList(); }
-  if(ed){ const t=await FormSheet.loadTemplate(sb,ed); openEditor({...t,fields:JSON.parse(JSON.stringify(t.fields))},{editId:ed,name:t.name}); }
+  if(ed){ const t=await FormSheet.loadTemplate(sb,ed), copy={...t,fields:JSON.parse(JSON.stringify(t.fields))};
+    if(ed==='builtin'){   // ต้นฉบับในระบบแก้ทับไม่ได้ -> บันทึกเป็นแบบฟอร์มใหม่ (ใช้ภาพเดิม) แล้วกด "ใช้งาน"
+      const have=new Set(copy.fields.map(f=>f.key)); DEFS.forEach(d=>{ if(!have.has(d.key)) copy.fields.push({key:d.key,type:d.type,missing:true}); });
+      openEditor(copy,{name:'FM-NMD-OPD-01-R02-01-67 (ปรับตำแหน่ง)',source_file:null,source_page:null,fromBuiltin:true});
+      msg($('#emsg'),'กำลังแก้ตำแหน่งของแบบฟอร์มต้นฉบับ — เมื่อบันทึกจะได้เป็นแบบฟอร์มใหม่ แล้วกด "ใช้งาน" เพื่อใช้แทนต้นฉบับ','info');
+    } else openEditor(copy,{editId:ed,name:t.name}); }
 };
 
 /* ---------------- โหลด PDF และเลือกหน้า ---------------- */
@@ -346,6 +351,8 @@ const SAMPLE={rank:'จ.ต.',fname:'สมชาย',lname:'ใจดี',fulln
   signature:'data:image/svg+xml;base64,'+btoa('<svg xmlns="http://www.w3.org/2000/svg" width="200" height="50"><path d="M5 35 C30 5 45 45 70 20 S110 40 130 15 S170 30 195 22" stroke="#0a1f6b" stroke-width="3" fill="none"/></svg>')};
 
 function openEditor(tpl,meta){
+  { const have=new Set(tpl.fields.map(f=>f.key)); DEFS.forEach(d=>{ if(!have.has(d.key)) tpl.fields.push({key:d.key,type:d.type,missing:true}); });
+    tpl.fields.sort((a,b)=>DEFS.findIndex(d=>d.key===a.key)-DEFS.findIndex(d=>d.key===b.key)); }
   ED={tpl,fields:tpl.fields,meta,sel:null};
   $('#home').style.display='none'; $('#editor').style.display='block';
   $('#tplName').value=meta.name||''; $('#edTitle').textContent=meta.editId?'แก้ไขตำแหน่งช่อง':'ปรับตำแหน่งช่อง';
