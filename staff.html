@@ -282,7 +282,7 @@ function drawSheet(){
   curItems=FormSheet.layout(d,new Date(cur.created_at),CFG.UNIT_NAME||'');
   // มุมซ้ายล่าง: ผู้พิมพ์ (บัญชีที่ล็อกอินอยู่) + วันเวลาที่พิมพ์
   const pt=new Date().toLocaleString('th-TH',{day:'numeric',month:'short',year:'2-digit',hour:'2-digit',minute:'2-digit'});
-  curItems.push({k:'f',x1:40,x2:285,top:786,fs:9.5,val:`ผู้พิมพ์: ${ME.name||'-'} (${ME.email})`});
+  curItems.push({k:'f',x1:40,x2:285,top:786,fs:9.5,val:`ผู้พิมพ์: ${ME.name||'-'}`});
   curItems.push({k:'f',x1:40,x2:285,top:799,fs:9.5,val:`พิมพ์เมื่อ: ${pt}`});
   $('#dSheet').innerHTML=FormSheet.html(curItems);
   const w=Math.min(window.innerWidth-48, 794);
