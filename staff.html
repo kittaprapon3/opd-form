@@ -80,6 +80,7 @@
 <header>
   <h1>คำขอมีเวชระเบียนผู้ป่วยนอก — เจ้าหน้าที่</h1>
   <span class="who" id="who"></span>
+  <a class="ghost" id="tplLink" href="templates.html" style="display:none;padding:8px 14px;border-radius:7px;font-weight:600;text-decoration:none;background:rgba(255,255,255,.15);color:#fff">📄 จัดการแบบฟอร์ม</a>
   <button class="ghost" id="editName" style="display:none">✎ ชื่อผู้พิมพ์</button>
   <button class="ghost" id="logout" style="display:none">ออกจากระบบ</button>
 </header>
@@ -199,7 +200,7 @@ $('#nameSave').onclick=async()=>{
   ME.name=data; showMe(); $('#nameDlg').style.display='none'; if(cur) drawSheet();
 };
 $('#myName').addEventListener('keydown',e=>{ if(e.key==='Enter') $('#nameSave').click(); });
-function showLogin(){ clearInterval(timer); $('#editName').style.display='none'; $('#app').style.display='none'; $('#login').style.display='block'; $('#logout').style.display='none'; $('#who').textContent=''; }
+function showLogin(){ clearInterval(timer); $('#editName').style.display='none'; $('#tplLink').style.display='none'; $('#app').style.display='none'; $('#login').style.display='block'; $('#logout').style.display='none'; $('#who').textContent=''; }
 $('#lf').onsubmit=async e=>{
   e.preventDefault(); $('#lbtn').disabled=true; msg($('#lmsg'),'');
   const {data,error}=await sb.auth.signInWithPassword({email:$('#email').value.trim(),password:$('#pw').value});
@@ -215,7 +216,7 @@ async function enter(session){
   $('#login').style.display='none'; $('#app').style.display='block'; $('#logout').style.display='';
   ME={email:session.user.email,name:''};
   try{ const {data}=await sb.rpc('my_profile'); if(data&&data[0]) ME=data[0]; }catch(e){}
-  showMe(); $('#editName').style.display='';
+  showMe(); $('#editName').style.display=''; $('#tplLink').style.display='';
   if(!ME.name) openNameDlg(true);
   await load(true);
   clearInterval(timer); timer=setInterval(()=>{ if($('#detail').style.display!=='block') load(); },30000);
@@ -274,16 +275,20 @@ async function openDetail(id){
   $('#dKv').innerHTML=kv.map(([k,v])=>`<div>${k}</div><div>${esc(v||'-')}</div>`).join('');
   $('#dHn').value=r.hn||''; $('#dStatus').value=r.status; $('#dNote').value=r.note||''; $('#dSaved').textContent='';
   $('#dMeta').textContent=[r.updated_at?`แก้ไขล่าสุด ${dt(r.updated_at)} โดย ${r.updated_by||'-'}`:'', r.printed_at?`พิมพ์แล้ว ${r.print_count} ครั้ง ล่าสุด ${dt(r.printed_at)} โดย ${r.printed_by||'-'}`:''].filter(Boolean).join(' · ');
+  curTpl=await FormSheet.loadTemplate(sb,(r.data||{}).template_id);   // พิมพ์ด้วยแบบฟอร์มฉบับที่คนไข้กรอกตอนส่ง
   drawSheet();
   $('#detail').style.display='block'; $('#detail').scrollTop=0;
 }
+let curTpl=FormSheet.BUILTIN;
 function drawSheet(){
   const d={...(cur.data||{}), cid:cur.cid, hn:$('#dHn').value.trim()};
-  curItems=FormSheet.layout(d,new Date(cur.created_at),CFG.UNIT_NAME||'');
+  curItems=FormSheet.layout(d,new Date(cur.created_at),CFG.UNIT_NAME||'',curTpl);
+  FormSheet.mount($('#dWrap .sheet'),curTpl);
   // มุมซ้ายล่าง: ผู้พิมพ์ (บัญชีที่ล็อกอินอยู่) + วันเวลาที่พิมพ์
   const pt=new Date().toLocaleString('th-TH',{day:'numeric',month:'short',year:'2-digit',hour:'2-digit',minute:'2-digit'});
-  curItems.push({k:'f',x1:40,x2:285,top:786,fs:9.5,val:`ผู้พิมพ์: ${ME.name||'-'}`});
-  curItems.push({k:'f',x1:40,x2:285,top:799,fs:9.5,val:`พิมพ์เมื่อ: ${pt}`});
+  const fy=curTpl.h-56, fx2=Math.min(285,curTpl.w*.48);
+  curItems.push({k:'f',x1:40,x2:fx2,top:fy,fs:9.5,val:`ผู้พิมพ์: ${ME.name||'-'}`});
+  curItems.push({k:'f',x1:40,x2:fx2,top:fy+13,fs:9.5,val:`พิมพ์เมื่อ: ${pt}`});
   $('#dSheet').innerHTML=FormSheet.html(curItems);
   const w=Math.min(window.innerWidth-48, 794);
   FormSheet.fit($('#dWrap'),$('#dWrap .sheet'),w);
@@ -305,7 +310,7 @@ $('#dPrint').onclick=()=>{ if(!ME.name) return openNameDlg(true); drawSheet(); l
 $('#dPdf').onclick=async()=>{
   if(!ME.name) return openNameDlg(true);
   const b=$('#dPdf'); b.disabled=true; drawSheet(); logPrint();
-  try{ (await FormSheet.pdf(curItems)).save(`${cur.ref}_${(cur.fullname||'').replace(/[\\/:*?"<>|\s]+/g,'_')}.pdf`); }
+  try{ (await FormSheet.pdf(curItems,null,curTpl)).save(`${cur.ref}_${(cur.fullname||'').replace(/[\\/:*?"<>|\s]+/g,'_')}.pdf`); }
   catch(e){ alert('สร้าง PDF ไม่สำเร็จ: '+e.message); }
   b.disabled=false;
 };

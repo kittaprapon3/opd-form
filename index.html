@@ -241,6 +241,7 @@ const CFG = window.APP_CONFIG || {};
 const UNIT_NAME  = CFG.UNIT_NAME || "";   // ตั้งค่าใน config.js
 const SB = (CFG.SUPABASE_URL && CFG.SUPABASE_ANON_KEY && window.supabase)
   ? window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, {auth:{persistSession:false}}) : null;
+let TPL=FormSheet.BUILTIN; const tplReady=FormSheet.loadActive(SB).then(t=>TPL=t);   // แบบฟอร์มที่ใช้งานอยู่
 
 const $ = s => document.querySelector(s);
 const form = $('#f');
@@ -759,8 +760,10 @@ form.addEventListener('submit',e=>{
 
 const esc=FormSheet.esc;
 let last=null, lastItems=[];
-function render(o){
-  last=o; o.now=o.now||new Date().toISOString(); lastItems=FormSheet.layout(o,new Date(o.now),UNIT_NAME);
+async function render(o){
+  await tplReady;
+  last=o; o.now=o.now||new Date().toISOString(); o.template_id=TPL.id; lastItems=FormSheet.layout(o,new Date(o.now),UNIT_NAME,TPL);
+  FormSheet.mount(document.querySelector('#wrap .sheet'),TPL);
   $('#sheet').innerHTML=FormSheet.html(lastItems);
   $('#formView').style.display='none'; document.querySelector('header').style.display='none';
   $('#paper').style.display='block';

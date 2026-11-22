@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>จัดการแบบฟอร์ม — คำขอมีเวชระเบียนผู้ป่วยนอก</title>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="form-sheet.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="config.js"></script>
+<script src="form-sheet.js"></script>
+<style>
+  :root{--navy:#0b2e59;--line:#d5dde8;--bg:#f3f6fa;--accent:#1d5fbf;--err:#c0392b;--ok:#0f7a4a}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'Sarabun',Tahoma,sans-serif;background:var(--bg);color:#1b2430;font-size:15px}
+  header{background:var(--navy);color:#fff;padding:10px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  header h1{font-size:17px;margin:0;flex:1}
+  header a{color:#fff;text-decoration:none;background:rgba(255,255,255,.15);padding:8px 14px;border-radius:7px;font-weight:600}
+  button,select,input{font:inherit}
+  button{border:0;border-radius:7px;padding:8px 14px;cursor:pointer;font-weight:600}
+  button:disabled{opacity:.5;cursor:default}
+  .primary{background:var(--accent);color:#fff}.ghost{background:#e7edf5;color:var(--navy)}.okb{background:var(--ok);color:#fff}.warn{background:#fde8e6;color:#8c2a22}
+  input,select{padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:#fff}
+  main{padding:14px 16px;max-width:1500px;margin:0 auto}
+  .card{background:#fff;border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:12px}
+  .card h2{margin:0 0 10px;font-size:17px;color:var(--navy)}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .meta{font-size:13px;color:#6b7b90}
+  .msg{padding:9px 12px;border-radius:8px;margin:8px 0;display:none}
+  .msg.err{display:block;background:#fdeeee;color:#8c2a22;border:1px solid #f1c0bd}
+  .msg.info{display:block;background:#eef4fd;color:#1b3c70;border:1px solid #c7d6ef}
+  .msg.ok{display:block;background:#e9f8ef;color:#0d5c33;border:1px solid #9fd9b5}
+  table{width:100%;border-collapse:collapse}
+  th,td{padding:7px 8px;border-bottom:1px solid #edf1f6;text-align:left}
+  th{font-size:13px;color:#43597a;background:#f0f4fa}
+  .badge{display:inline-block;padding:2px 9px;border-radius:20px;font-size:12.5px;font-weight:600;background:#e3f6ea;color:#0d5c33}
+  #pageThumb{max-width:260px;border:1px solid var(--line);border-radius:6px;display:none}
+  .sugg button{background:#eef4fd;color:#1b3c70;margin:2px}
+
+  /* editor */
+  #editor{display:none}
+  .ed{display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap}
+  .side{flex:1 1 300px;min-width:280px;max-height:calc(100vh - 120px);overflow:auto;position:sticky;top:10px}
+  .flist{font-size:13.5px}
+  .flist tr.miss td{color:#a33}
+  .flist tr.sel td{background:#fff4d6}
+  .flist td:last-child{white-space:nowrap}
+  .flist button{padding:3px 8px;font-size:12.5px}
+  .canvasWrap{flex:0 0 auto}
+  .fbox{position:absolute;border:1.5px dashed #e07b00;background:rgba(255,190,90,.18);cursor:move;font-size:7pt;color:#8a4b00;line-height:1;white-space:nowrap;overflow:visible}
+  .fbox .lb{position:absolute;left:0;top:-9pt;background:#fff8e6;padding:0 2px;border-radius:2px;pointer-events:none;font-size:6.5pt}
+  .fbox.sel{border-color:#d12;background:rgba(255,80,80,.18);z-index:5}
+  .fbox .rs{position:absolute;right:-4pt;bottom:-4pt;width:8pt;height:8pt;background:#e07b00;cursor:nwse-resize;border-radius:2px}
+  .fbox.chk{width:9.6pt;height:9.6pt;border-style:solid}
+  .fbox.dig{width:14.4pt;height:15pt}
+  body.preview .fbox{display:none}
+  .help{font-size:13px;color:#43597a;line-height:1.6}
+</style>
+</head>
+<body>
+<header>
+  <h1>📄 จัดการแบบฟอร์ม</h1>
+  <span id="who" style="font-size:13px;opacity:.85"></span>
+  <a href="staff.html">← หน้าเจ้าหน้าที่</a>
+</header>
+<main>
+  <div class="msg" id="gmsg"></div>
+
+  <div id="home" style="display:none">
+    <div class="card">
+      <h2>แบบฟอร์มในระบบ</h2>
+      <table><thead><tr><th>ชื่อ</th><th>ที่มา</th><th>สร้างเมื่อ / โดย</th><th></th></tr></thead><tbody id="tplRows"></tbody></table>
+      <div class="meta" style="margin-top:8px">คนไข้จะเห็นและกรอกแบบฟอร์มที่ "ใช้งานอยู่" · คำขอเก่าจะพิมพ์ด้วยแบบฟอร์มฉบับที่ใช้ตอนคนไข้ส่งเสมอ</div>
+    </div>
+
+    <div class="card">
+      <h2>เพิ่มแบบฟอร์มใหม่จาก PDF</h2>
+      <div class="row">
+        <input type="file" id="pdfIn" accept="application/pdf">
+        <span class="meta" id="pdfInfo"></span>
+      </div>
+      <div id="pagePick" style="display:none;margin-top:10px">
+        <div class="row">
+          <label>หน้าที่ <input type="number" id="pageNo" min="1" value="1" style="width:90px"></label>
+          <span class="meta" id="pageCount"></span>
+          <button class="ghost" id="prevP">‹</button><button class="ghost" id="nextP">›</button>
+          <button class="ghost" id="findPage">🔍 หาหน้าแบบฟอร์มให้</button>
+          <button class="primary" id="usePage">ใช้หน้านี้ → วางช่องอัตโนมัติ</button>
+        </div>
+        <div class="sugg meta" id="sugg" style="margin-top:6px"></div>
+        <img id="pageThumb" alt="" style="margin-top:8px">
+      </div>
+    </div>
+  </div>
+
+  <div id="editor">
+    <div class="ed">
+      <div class="side">
+        <div class="card">
+          <h2 id="edTitle">ปรับตำแหน่งช่อง</h2>
+          <div class="help">ระบบวางช่องให้อัตโนมัติจากข้อความในแบบฟอร์ม — ตรวจดูแล้ว <b>ลาก</b> กรอบสีส้มเพื่อย้าย, ลากมุมขวาล่างเพื่อปรับความกว้าง · ช่องสีแดงในรายการ = หาไม่เจอ กด "วาง" แล้วลากไปที่ตำแหน่ง · ปุ่มลูกศรบนคีย์บอร์ดเลื่อนช่องที่เลือกทีละ 0.5 pt</div>
+          <div class="row" style="margin-top:10px">
+            <label style="font-weight:600"><input type="checkbox" id="pv"> ดูตัวอย่างข้อมูล</label>
+          </div>
+          <div class="msg" id="emsg"></div>
+          <div class="row" style="margin-top:10px">
+            <input type="text" id="tplName" placeholder="ชื่อแบบฟอร์ม เช่น FM-NMD-OPD-01 ฉบับ 2570" style="flex:1;min-width:200px">
+          </div>
+          <div class="row" style="margin-top:8px">
+            <button class="okb" id="saveTpl">💾 บันทึกแบบฟอร์ม</button>
+            <button class="ghost" id="cancelEd">ยกเลิก</button>
+          </div>
+        </div>
+        <div class="card"><table class="flist"><tbody id="fRows"></tbody></table></div>
+      </div>
+      <div class="canvasWrap">
+        <div class="sheetwrap" id="eWrap"><div class="sheet" id="eSheet"><img src="" style="position:absolute;inset:0;width:100%;height:100%" alt=""><div id="eItems" style="position:absolute;inset:0"></div><div id="eBoxes" style="position:absolute;inset:0"></div></div></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+const CFG=window.APP_CONFIG||{}, $=s=>document.querySelector(s), esc=FormSheet.esc;
+const DEFS=FormSheet.FIELD_DEFS, DEF=Object.fromEntries(DEFS.map(d=>[d.key,d]));
+function msg(el,t,k){ el.className='msg'+(t?' '+(k||'err'):''); el.textContent=t||''; }
+pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+const PDF_OPTS={cMapUrl:'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',cMapPacked:true,
+  standardFontDataUrl:'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/standard_fonts/'};
+let sb=null, ME=null, pdfDoc=null, pdfName='', ED=null;   // ED = {tpl, fields, sel}
+
+/* ---------------- เข้าสู่ระบบ (ใช้ session เดียวกับหน้าเจ้าหน้าที่) ---------------- */
+(async function(){
+  if(!CFG.SUPABASE_URL||!window.supabase) return msg($('#gmsg'),'ยังไม่ได้ตั้งค่า Supabase ใน config.js');
+  sb=window.supabase.createClient(CFG.SUPABASE_URL,CFG.SUPABASE_ANON_KEY);
+  const {data:{session}}=await sb.auth.getSession();
+  if(!session) return msg($('#gmsg'),'กรุณาเข้าสู่ระบบที่หน้าเจ้าหน้าที่ก่อน แล้วกลับมาหน้านี้');
+  const {data:ok}=await sb.rpc('is_staff'); if(!ok) return msg($('#gmsg'),'บัญชีนี้ไม่มีสิทธิ์');
+  ME=session.user.email; $('#who').textContent=ME;
+  $('#home').style.display='block'; loadList();
+})();
+
+async function loadList(){
+  const {data,error}=await sb.from('form_templates').select('id,name,source_file,source_page,is_active,created_at,created_by').order('created_at',{ascending:false});
+  if(error) return msg($('#gmsg'),'โหลดรายการไม่สำเร็จ: '+error.message);
+  const anyActive=data.some(t=>t.is_active);
+  const row=(t)=>`<tr><td><b>${esc(t.name)}</b> ${t.is_active?'<span class="badge">ใช้งานอยู่</span>':''}</td>
+     <td class="meta">${t.source_file?esc(t.source_file)+' · หน้า '+t.source_page:'ในระบบ'}</td>
+     <td class="meta">${t.created_at?new Date(t.created_at).toLocaleString('th-TH',{dateStyle:'medium',timeStyle:'short'})+' · '+esc(t.created_by||''):'-'}</td>
+     <td style="white-space:nowrap">${t.is_active?'':`<button class="okb" data-act="${t.id}">ใช้งาน</button>`}
+       ${t.id==='builtin'?'':`<button class="ghost" data-edit="${t.id}">แก้ไขตำแหน่ง</button>`}</td></tr>`;
+  $('#tplRows').innerHTML=row({id:'builtin',name:FormSheet.BUILTIN.name,is_active:!anyActive})+data.map(row).join('');
+}
+$('#tplRows').onclick=async e=>{
+  const a=e.target.dataset.act, ed=e.target.dataset.edit;
+  if(a){ e.target.disabled=true;
+    const {error}=await sb.rpc('activate_template',{p_id:a==='builtin'?null:a});
+    if(error) msg($('#gmsg'),'เปลี่ยนไม่สำเร็จ: '+error.message); else { msg($('#gmsg'),'เปลี่ยนแบบฟอร์มที่ใช้งานแล้ว — คนไข้จะเห็นแบบฟอร์มนี้ตั้งแต่ตอนนี้','ok'); FormSheet._cache={}; }
+    loadList(); }
+  if(ed){ const t=await FormSheet.loadTemplate(sb,ed); openEditor({...t,fields:JSON.parse(JSON.stringify(t.fields))},{editId:ed,name:t.name}); }
+};
+
+/* ---------------- โหลด PDF และเลือกหน้า ---------------- */
+$('#pdfIn').onchange=async e=>{
+  const f=e.target.files[0]; if(!f) return;
+  msg($('#gmsg'),'กำลังเปิดไฟล์...','info');
+  try{
+    pdfDoc=await pdfjsLib.getDocument({data:new Uint8Array(await f.arrayBuffer()),...PDF_OPTS}).promise; pdfName=f.name;
+    $('#pdfInfo').textContent=`${f.name} · ${(f.size/1048576).toFixed(1)} MB`;
+    $('#pageCount').textContent=`จาก ${pdfDoc.numPages} หน้า`; $('#pageNo').max=pdfDoc.numPages; $('#pageNo').value=1;
+    $('#pagePick').style.display='block'; $('#sugg').innerHTML=''; msg($('#gmsg'),'');
+    showThumb();
+  }catch(err){ msg($('#gmsg'),'เปิดไฟล์ PDF ไม่ได้: '+err.message); }
+};
+const pageNo=()=>Math.max(1,Math.min(pdfDoc.numPages,+$('#pageNo').value||1));
+$('#pageNo').onchange=showThumb;
+$('#prevP').onclick=()=>{ $('#pageNo').value=pageNo()-1; showThumb(); };
+$('#nextP').onclick=()=>{ $('#pageNo').value=pageNo()+1; showThumb(); };
+async function renderPage(n,scale){
+  const p=await pdfDoc.getPage(n), vp=p.getViewport({scale}), c=document.createElement('canvas');
+  c.width=Math.round(vp.width); c.height=Math.round(vp.height);
+  const g=c.getContext('2d'); g.fillStyle='#fff'; g.fillRect(0,0,c.width,c.height);
+  await p.render({canvasContext:g,viewport:vp}).promise; return c;
+}
+let thumbSeq=0;
+async function showThumb(){ const s=++thumbSeq, c=await renderPage(pageNo(),0.5); if(s!==thumbSeq) return; const im=$('#pageThumb'); im.src=c.toDataURL('image/jpeg',.7); im.style.display='block'; }
+$('#findPage').onclick=async()=>{
+  const b=$('#findPage'); b.disabled=true; const scores=[];
+  for(let n=1;n<=pdfDoc.numPages;n++){
+    b.textContent=`กำลังค้น ${n}/${pdfDoc.numPages}`;
+    const {fields}=detect(await pageLines(n));
+    scores.push({n,s:fields.filter(f=>!f.missing).length});
+  }
+  b.disabled=false; b.textContent='🔍 หาหน้าแบบฟอร์มให้';
+  const top=scores.sort((a,b)=>b.s-a.s).slice(0,5).filter(x=>x.s>0);
+  $('#sugg').innerHTML=top.length?'หน้าที่น่าจะเป็นแบบฟอร์ม: '+top.map(x=>`<button data-p="${x.n}">หน้า ${x.n} (พบ ${x.s} ช่อง)</button>`).join(''):'ไม่พบหน้าที่มีช่องของแบบฟอร์มนี้ (PDF อาจเป็นภาพสแกน ที่อ่านข้อความไม่ได้)';
+};
+$('#sugg').onclick=e=>{ const p=e.target.dataset.p; if(p){ $('#pageNo').value=p; showThumb(); } };
+
+/* ---------------- อ่านข้อความพร้อมตำแหน่งตัวอักษร ---------------- */
+async function pageLines(n){
+  const p=await pdfDoc.getPage(n), vp=p.getViewport({scale:1}), tc=await p.getTextContent();
+  const H=vp.height, W=vp.width, chars=[];
+  for(const it of tc.items){
+    const s=(it.str||'').normalize('NFC').replace(/\u0E4D\u0E32/g,'\u0E33'); if(!s) continue;   // ํา -> ำ
+    const x=it.transform[4], base=H-it.transform[5], fs=Math.hypot(it.transform[2],it.transform[3])||it.height||10;
+    const arr=[...s], w=it.width||fs*arr.length*.5;
+    arr.forEach((ch,i)=>chars.push({ch,x0:x+w*i/arr.length,x1:x+w*(i+1)/arr.length,base,fs}));
+  }
+  // จัดเป็นบรรทัดตามตำแหน่งแนวตั้ง
+  chars.sort((a,b)=>a.base-b.base||a.x0-b.x0);
+  const lines=[];
+  for(const c of chars){ let L=lines.find(l=>Math.abs(l.base-c.base)<Math.max(2.5,c.fs*.3)); if(!L){ L={base:c.base,fs:c.fs,chars:[]}; lines.push(L);} L.chars.push(c); }
+  for(const L of lines){
+    L.chars.sort((a,b)=>a.x0-b.x0);
+    // ข้อความไม่รวมช่องว่าง + ตำแหน่งของแต่ละตัวอักษร
+    L.cs=L.chars.filter(c=>!/\s/.test(c.ch)); L.text=L.cs.map(c=>c.ch).join('');
+    L.fs=L.cs.reduce((m,c)=>Math.max(m,c.fs),0)||L.fs;
+  }
+  lines.sort((a,b)=>a.base-b.base);
+  return {lines,W,H};
+}
+
+/* ---------------- วางช่องอัตโนมัติ ---------------- */
+const LEADER=/[.…_\-‥·•]/;
+function detect({lines,W,H}){
+  const R=W-28, out={}, used=new Set();
+  const find=(re,from=0,pred)=>{ // หา label ทีละบรรทัด คืน {L, i(start idx), j(end idx)}
+    for(let li=from;li<lines.length;li++){ const L=lines[li]; re.lastIndex=0; let m;
+      const g=new RegExp(re.source,'g');
+      while((m=g.exec(L.text))){ const key=li+':'+m.index; if(used.has(key)) continue;
+        if(pred&&!pred(L,m,li)) continue; return {L,li,i:m.index,j:m.index+m[0].length}; } }
+    return null; };
+  const take=h=>{ if(h) used.add(h.li+':'+h.i); return h; };
+  const regionEnd=(L,j)=>{ // จบช่อง = ตัวอักษรถัดไปที่ไม่ใช่เส้นประ (= label ถัดไป) หรือสุดเส้นประ
+    let k=j; while(k<L.cs.length&&LEADER.test(L.cs[k].ch)) k++;
+    if(k<L.cs.length) return L.cs[k].x0-2;
+    return k>j?Math.min(R,L.cs[k-1].x1):R; };
+  const textField=(key,h,opt={})=>{ if(!h) return; take(h); const L=h.L;
+    const x1=(opt.xStart??L.cs[h.j-1].x1)+1, x2=Math.max(x1+20,regionEnd(L,h.j)-0);
+    out[key]={key,type:'text',x1:+x1.toFixed(1),x2:+x2.toFixed(1),top:+(L.base-12.5).toFixed(1),...(opt.fs?{fs:opt.fs}:{})}; };
+  const after=(re)=>{ const h=find(re); return h?h.li:0; };
+
+  // หัวกระดาษ / ช่องเจ้าหน้าที่
+  textField('unitName',find(/ชื่อหน่วย/));
+  textField('date',find(/วันเดือนปี(?!เกิด)/));
+  textField('time',find(/เวลา/));
+  textField('hn',find(/HN/));
+  // ผู้รับบริการ
+  const svc=after(/สำหรับผู้รับบริการ/);
+  textField('fullname',find(/ยศ-?ชื่อ-?สกุล/,svc)||find(/ชื่อ-?สกุล/,svc));
+  textField('sex',find(/เพศ/,svc));
+  textField('age',find(/อายุ/,svc));
+  textField('dob',find(/วันเดือนปีเกิด|วันเกิด/,svc),{fs:10.5});
+  textField('unit',find(/สังกัด/,svc));
+  textField('occupation',find(/อาชีพ/,svc));
+  textField('religion',find(/ศาสนา/,svc));
+  textField('goldcard',find(/บัตรทอง(ท\/R|ท\/ร)?/,svc));
+  textField('conscript',find(/ผลัดที่\/?ปี|ผลัดที่/,svc));
+  // เลขบัตรประชาชน 13 หลัก (1-4-5-2-1)
+  { const h=take(find(/เลขที่บัตรประชาชน|เลขประจำตัวประชาชน/,svc)); if(h){ const L=h.L, x0=L.cs[h.j-1].x1+4, x1=Math.min(regionEnd(L,h.j),x0+270);
+      const s=(x1-x0)/17, xs=[]; let x=x0; [1,4,5,2,1].forEach((n,gi)=>{ for(let k=0;k<n;k++){ xs.push(+x.toFixed(1)); x+=s; } x+=s; });
+      out.cid={key:'cid',type:'digits',y:+(L.base-12.5).toFixed(1),xs}; } }
+  // ที่อยู่: ชุดแรก = ตามบัตร, ชุดหลัง "ที่อยู่ปัจจุบัน" = ปัจจุบัน
+  const curLi=after(/ที่อยู่ปัจจุบัน/), bloodLi=after(/หมู่เลือด/)||lines.length;
+  for(const [p,from,to] of [['a',svc,curLi||bloodLi],['c',curLi,bloodLi]]){ if(p==='c'&&!curLi) continue;
+    const inRange=(L,m,li)=>li>=from&&li<to;
+    textField(p+'_no',find(/บ้านเลขที่/,from,inRange));
+    textField(p+'_moo',find(/หมู่(?!เลือด)(ที่)?/,from,inRange));
+    textField(p+'_soi',find(/ซอย/,from,inRange));
+    textField(p+'_road',find(/ถนน/,from,inRange));
+    textField(p+'_tambon',find(/ตำบล|แขวง/,from,inRange));
+    textField(p+'_amphoe',find(/อำเภอ|เขต/,from,inRange));
+    textField(p+'_prov',find(/จังหวัด/,from,inRange));
+  }
+  textField('phone',find(/โทรศัพท์/,svc));
+  // ช่องติ๊ก: หาคำตัวเลือกในช่วงของหัวข้อนั้น แล้ววางกล่องไว้ทางซ้ายของคำ
+  const checks=(key,reHead,reEnd)=>{ const h=find(reHead,svc); if(!h) return; const L=h.L;
+    let end=L.cs.length; if(reEnd){ const m=new RegExp(reEnd.source).exec(L.text.slice(h.j)); if(m) end=h.j+m.index; }
+    const seg=L.text.slice(h.j,end), opts={};
+    for(const o of DEF[key].opts){ const k=seg.indexOf(o); if(k<0) continue; const c=L.cs[h.j+k];
+      const prev=L.cs[h.j+k-1], boxX=(prev&&!/[ก-๛A-Za-z0-9]/.test(prev.ch))?prev.x0+((prev.x1-prev.x0)-9.6)/2:c.x0-11.5;
+      opts[o]=[+boxX.toFixed(1),+(L.base-9.4).toFixed(1)]; }
+    if(Object.keys(opts).length) out[key]={key,type:'check',opts}; };
+  checks('marital',/สถานะ/);
+  checks('blood',/หมู่เลือด/,/Rh/);
+  checks('rh',/Rh/);
+  checks('allergy',/แพ้ยา/,/ระบุ|ชื่อยา/);
+  textField('drug',find(/ระบุชื่อยาที่แพ้|ชื่อยาที่แพ้/,svc));
+  textField('reaction',find(/อาการที่แพ้/,svc));
+  textField('disease',find(/โรคประจำตัว/,svc));
+  // ผู้ที่ติดต่อได้
+  const ec=after(/ผู้ที่ติดต่อได้/);
+  if(ec){ textField('ec_name',find(/ชื่อ-?สกุล/,ec)); textField('ec_rel',find(/เกี่ยวข้องเป็น/,ec));
+    textField('ec_addr',find(/ที่อยู่ของผู้ที่ติดต่อได้/,ec)); textField('ec_phone',find(/เบอร์โทร/,ec)); }
+  // ลายเซ็น และความสัมพันธ์
+  { const h=take(find(/ลงชื่อ(\(ตัวบรรจง\))?/,ec||svc)); if(h){ const L=h.L, x=L.cs[h.j-1].x1+2, x2=Math.min(regionEnd(L,h.j),x+140);
+      out.signature={key:'signature',type:'sig',x:+x.toFixed(1),y:+(L.base-26).toFixed(1),w:+(x2-x).toFixed(1),h:25}; } }
+  textField('signerRel',find(/ความสัมพันธ์เป็น/,ec||svc));
+
+  const fields=DEFS.map(d=>out[d.key]||{key:d.key,type:d.type,missing:true});
+  return {fields,W,H};
+}
+
+$('#usePage').onclick=async()=>{
+  const b=$('#usePage'); b.disabled=true; b.textContent='กำลังวางช่อง...';
+  try{
+    const n=pageNo(), pl=await pageLines(n), {fields,W,H}=detect(pl);
+    const c=await renderPage(n,150/72);
+    const tpl={id:null,bg:c.toDataURL('image/jpeg',.85),w:+W.toFixed(2),h:+H.toFixed(2),fields};
+    const found=fields.filter(f=>!f.missing).length;
+    if(!pl.lines.length) msg($('#gmsg'),'หน้านี้ไม่มีข้อความที่อ่านได้ (อาจเป็นภาพสแกน) — ต้องวางช่องเองทั้งหมด','err');
+    openEditor(tpl,{source_file:pdfName,source_page:n,name:`${pdfName.replace(/\.pdf$/i,'')} หน้า ${n}`});
+    msg($('#emsg'),`วางช่องอัตโนมัติได้ ${found} จาก ${fields.length} ช่อง — ตรวจตำแหน่งก่อนบันทึก`,found>=fields.length*.8?'ok':'info');
+  }catch(err){ msg($('#gmsg'),'อ่านหน้านี้ไม่ได้: '+err.message); }
+  b.disabled=false; b.textContent='ใช้หน้านี้ → วางช่องอัตโนมัติ';
+};
+
+/* ---------------- ตัวแก้ไขตำแหน่ง ---------------- */
+const SAMPLE={rank:'จ.ต.',fname:'สมชาย',lname:'ใจดี',fullname:'จ.ต.สมชาย ใจดี',sex:'ชาย',age:'30',dob:'1996-05-10',unit:'รพ.ฐท.พง.',occupation:'ทหารเรือ',religion:'พุทธ',
+  marital:'โสด',cid:'1101700230708',goldcard:'ท12345',conscript:'1/2569',a_no:'12/3',a_moo:'5',a_soi:'สุขใจ',a_road:'เพชรเกษม',a_tambon:'ท้ายเหมือง',a_amphoe:'ท้ายเหมือง',a_prov:'พังงา',
+  c_no:'99',c_moo:'1',c_soi:'-',c_road:'-',c_tambon:'ลำแก่น',c_amphoe:'ท้ายเหมือง',c_prov:'พังงา',phone:'0812345678',blood:'โอ',rh:'บวก',allergy:'แพ้',drug:'Penicillin',reaction:'ผื่น',
+  disease:'ไม่มี',ec_name:'นางมาลี ใจดี',ec_rel:'มารดา',ec_addr:'12/3 ม.5 ต.ท้ายเหมือง',ec_phone:'0899999999',signerRole:'ผู้ให้ข้อมูล',signerRel:'บุตร',hn:'65-12345',
+  signature:'data:image/svg+xml;base64,'+btoa('<svg xmlns="http://www.w3.org/2000/svg" width="200" height="50"><path d="M5 35 C30 5 45 45 70 20 S110 40 130 15 S170 30 195 22" stroke="#0a1f6b" stroke-width="3" fill="none"/></svg>')};
+
+function openEditor(tpl,meta){
+  ED={tpl,fields:tpl.fields,meta,sel:null};
+  $('#home').style.display='none'; $('#editor').style.display='block';
+  $('#tplName').value=meta.name||''; $('#edTitle').textContent=meta.editId?'แก้ไขตำแหน่งช่อง':'ปรับตำแหน่งช่อง';
+  FormSheet.mount($('#eSheet'),tpl); $('#eSheet img').src=tpl.bg;
+  drawAll(); window.scrollTo(0,0);
+}
+$('#cancelEd').onclick=()=>{ ED=null; $('#editor').style.display='none'; $('#home').style.display='block'; msg($('#emsg'),''); };
+$('#pv').onchange=()=>{ document.body.classList.toggle('preview',$('#pv').checked); drawItems(); };
+function scale(){ return +($('#eSheet').style.transform.match(/scale\(([\d.]+)\)/)||[0,1])[1]; }
+function drawAll(){ FormSheet.fit($('#eWrap'),$('#eSheet'),Math.max(500,Math.min(window.innerWidth-380,1100))); drawBoxes(); drawItems(); drawList(); }
+function drawItems(){ $('#eItems').innerHTML=$('#pv').checked?FormSheet.html(FormSheet.layout(SAMPLE,new Date(),CFG.UNIT_NAME||'หน่วยตัวอย่าง',{...ED.tpl,fields:ED.fields.filter(f=>!f.missing)})):''; }
+function drawList(){
+  $('#fRows').innerHTML=ED.fields.map((f,i)=>`<tr class="${f.missing?'miss':''} ${ED.sel===i?'sel':''}" data-i="${i}"><td>${esc(DEF[f.key].label)}</td>
+    <td>${f.missing?`<button class="warn" data-place="${i}">วาง</button>`:`<button class="ghost" data-pick="${i}">เลือก</button> <button class="ghost" data-del="${i}" title="ไม่ใช้ช่องนี้">✕</button>`}</td></tr>`).join('');
+}
+$('#fRows').onclick=e=>{ const d=e.target.dataset;
+  if(d.place!=null){ const f=ED.fields[+d.place], cx=ED.tpl.w/2-40, cy=ED.tpl.h/2;
+    if(f.type==='text') Object.assign(f,{x1:cx,x2:cx+120,top:cy});
+    else if(f.type==='sig') Object.assign(f,{x:cx,y:cy,w:120,h:25});
+    else if(f.type==='digits') Object.assign(f,{y:cy,xs:Array.from({length:13},(_,k)=>+(cx+k*16+(k>0)*6+(k>4)*6+(k>9)*6+(k>11)*6).toFixed(1))});
+    else if(f.type==='check') f.opts=Object.fromEntries(DEF[f.key].opts.map((o,k)=>[o,[cx+k*40,cy]]));
+    delete f.missing; ED.sel=+d.place; drawAll(); }
+  if(d.pick!=null){ ED.sel=+d.pick; drawBoxes(); drawList(); }
+  if(d.del!=null){ const f=ED.fields[+d.del]; ED.fields[+d.del]={key:f.key,type:f.type,missing:true}; ED.sel=null; drawAll(); }
+};
+function drawBoxes(){
+  const B=$('#eBoxes'); B.innerHTML='';
+  const box=(i,cls,x,y,w,h,label,extra)=>{ const d=document.createElement('div'); d.className='fbox '+cls+(ED.sel===i?' sel':'');
+    Object.assign(d.style,{left:x+'pt',top:y+'pt',...(w?{width:w+'pt'}:{}),...(h?{height:h+'pt'}:{})}); d.dataset.i=i; Object.assign(d.dataset,extra||{});
+    if(label) d.innerHTML=`<span class="lb">${esc(label)}</span>`; B.appendChild(d); return d; };
+  ED.fields.forEach((f,i)=>{ if(f.missing) return; const lb=DEF[f.key].label;
+    if(f.type==='text'){ box(i,'',f.x1,f.top,f.x2-f.x1,15,lb).insertAdjacentHTML('beforeend','<div class="rs"></div>'); }
+    else if(f.type==='sig'){ box(i,'',f.x,f.y,f.w,f.h,lb).insertAdjacentHTML('beforeend','<div class="rs"></div>'); }
+    else if(f.type==='digits'){ f.xs.forEach((x,k)=>box(i,'dig',x,f.y,null,null,k===0?lb:'',{k})); }
+    else if(f.type==='check'){ for(const [o,[x,y]] of Object.entries(f.opts)) box(i,'chk',x,y,null,null,o,{o}); }
+  });
+}
+/* ลาก: ย้าย / ปรับขนาด (หน่วย pt) */
+let drag=null;
+$('#eBoxes').addEventListener('pointerdown',e=>{
+  const el=e.target.closest('.fbox'); if(!el) return; e.preventDefault();
+  const i=+el.dataset.i, f=ED.fields[i]; ED.sel=i; drawList();
+  document.querySelectorAll('.fbox').forEach(b=>b.classList.toggle('sel',+b.dataset.i===i));
+  drag={i,f,el,resize:e.target.classList.contains('rs'),k:el.dataset.k,o:el.dataset.o,sx:e.clientX,sy:e.clientY,snap:JSON.parse(JSON.stringify(f)),moveGroup:e.shiftKey};
+  el.setPointerCapture(e.pointerId);
+});
+$('#eBoxes').addEventListener('pointermove',e=>{
+  if(!drag) return; const k=scale()*96/72, dx=(e.clientX-drag.sx)/k, dy=(e.clientY-drag.sy)/k, f=drag.f, s=drag.snap, r=v=>+v.toFixed(1);
+  if(f.type==='text'){ if(drag.resize) f.x2=r(Math.max(s.x1+10,s.x2+dx)); else { f.x1=r(s.x1+dx); f.x2=r(s.x2+dx); f.top=r(s.top+dy); } }
+  else if(f.type==='sig'){ if(drag.resize){ f.w=r(Math.max(20,s.w+dx)); f.h=r(Math.max(10,s.h+dy)); } else { f.x=r(s.x+dx); f.y=r(s.y+dy); } }
+  else if(f.type==='digits'){ f.y=r(s.y+dy); if(drag.moveGroup||drag.k==='0') f.xs=s.xs.map(x=>r(x+dx)); else f.xs[+drag.k]=r(s.xs[+drag.k]+dx); }
+  else if(f.type==='check'){ if(drag.moveGroup) for(const o in f.opts) f.opts[o]=[r(s.opts[o][0]+dx),r(s.opts[o][1]+dy)]; else f.opts[drag.o]=[r(s.opts[drag.o][0]+dx),r(s.opts[drag.o][1]+dy)]; }
+  drawBoxes(); if($('#pv').checked) drawItems();
+});
+['pointerup','pointercancel'].forEach(t=>$('#eBoxes').addEventListener(t,()=>{ if(drag){ drag=null; drawBoxes(); drawItems(); } }));
+document.addEventListener('keydown',e=>{
+  if(!ED||ED.sel==null||!/^Arrow/.test(e.key)||/INPUT|TEXTAREA/.test(document.activeElement.tagName)) return; e.preventDefault();
+  const d=.5*(e.shiftKey?4:1), dx=e.key==='ArrowLeft'?-d:e.key==='ArrowRight'?d:0, dy=e.key==='ArrowUp'?-d:e.key==='ArrowDown'?d:0, f=ED.fields[ED.sel], r=v=>+v.toFixed(1);
+  if(f.type==='text'){ f.x1=r(f.x1+dx); f.x2=r(f.x2+dx); f.top=r(f.top+dy); }
+  else if(f.type==='sig'){ f.x=r(f.x+dx); f.y=r(f.y+dy); }
+  else if(f.type==='digits'){ f.xs=f.xs.map(x=>r(x+dx)); f.y=r(f.y+dy); }
+  else if(f.type==='check'){ for(const o in f.opts) f.opts[o]=[r(f.opts[o][0]+dx),r(f.opts[o][1]+dy)]; }
+  drawBoxes(); drawItems();
+});
+window.addEventListener('resize',()=>{ if(ED) drawAll(); });
+
+/* ---------------- บันทึก ---------------- */
+$('#saveTpl').onclick=async()=>{
+  const name=$('#tplName').value.trim(); if(!name) return msg($('#emsg'),'กรุณาตั้งชื่อแบบฟอร์ม');
+  const fields=ED.fields.filter(f=>!f.missing).map(f=>{ const c={...f}; delete c.missing; return c; });
+  const need=['fullname','cid','signature'].filter(k=>!fields.some(f=>f.key===k));
+  const b=$('#saveTpl'); b.disabled=true; b.textContent='กำลังบันทึก...';
+  let error;
+  if(ED.meta.editId){ ({error}=await sb.from('form_templates').update({name,fields}).eq('id',ED.meta.editId)); }
+  else { ({error}=await sb.from('form_templates').insert({name,source_file:ED.meta.source_file,source_page:ED.meta.source_page,width_pt:ED.tpl.w,height_pt:ED.tpl.h,bg:ED.tpl.bg,fields})); }
+  b.disabled=false; b.textContent='💾 บันทึกแบบฟอร์ม';
+  if(error) return msg($('#emsg'),'บันทึกไม่สำเร็จ: '+error.message);
+  FormSheet._cache={};
+  $('#cancelEd').click(); loadList();
+  msg($('#gmsg'),`บันทึก "${name}" แล้ว`+(need.length?` (ยังไม่มีช่อง: ${need.map(k=>DEF[k].label).join(', ')})`:'')+' — กด "ใช้งาน" ในตารางเมื่อพร้อมให้คนไข้ใช้','ok');
+};
+</script>
+</body>
+</html>
