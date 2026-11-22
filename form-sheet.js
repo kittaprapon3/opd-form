@@ -7,6 +7,7 @@ const thDate=d=>{if(!d)return '';const x=new Date(d);return isNaN(x)?'':x.toLoca
 /* ช่องข้อมูลทั้งหมดที่ระบบรู้จัก (ลำดับ = ลำดับในหน้าจัดการแบบฟอร์ม) */
 const FIELD_DEFS=[
   {key:'unitName',  label:'ชื่อหน่วย (กรอบเจ้าหน้าที่)', type:'text'},
+  {key:'snc',       label:'SNC (กรอบเจ้าหน้าที่)',      type:'text'},
   {key:'date',      label:'วันเดือนปี (วันที่ส่ง)',       type:'text'},
   {key:'time',      label:'เวลา',                       type:'text'},
   {key:'hn',        label:'HN',                         type:'text'},
@@ -55,7 +56,7 @@ const T=(key,x1,x2,top,fs)=>({key,type:'text',x1,x2,top,...(fs?{fs}:{})});
 const BUILTIN={
   id:'builtin', name:'FM-NMD-OPD-01-R02-01-67 (ต้นฉบับในระบบ)', bg:'form-bg.png', w:595.22, h:842,
   fields:[
-    T('unitName',442,588,89.9), T('hn',92,205,135.5), T('date',449,507,121.5), T('time',535,583,121.5),
+    T('unitName',442,588,89.9), T('snc',423,588,104.5), T('hn',92,205,135.5), T('date',449,507,121.5), T('time',535,583,121.5),
     T('fullname',101,300,166.5), T('sex',315,375,166.5), T('age',390,432,166.5), T('dob',498,566,166.5,10.5),
     T('unit',77,275,182.5), T('occupation',297,438,182.5), T('religion',464,566,182.5),
     {key:'marital',type:'check',opts:{โสด:[89.8,202.6],คู่:[122.9,202.6],หม้าย:[152.6,202.6],หย่า:[195.8,202.6],สมณะ:[236.2,202.6]}},
@@ -79,6 +80,7 @@ const BUILTIN={
 function values(o,now,unitName){
   const v={...o};
   v.unitName=unitName||'';
+  v.snc=o.snc||'';
   v.date=now.toLocaleDateString('th-TH',{day:'numeric',month:'short',year:'2-digit'});
   v.time=now.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});
   v.dob=thDate(o.dob);

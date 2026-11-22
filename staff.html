@@ -88,7 +88,7 @@
   <h1>คำขอมีเวชระเบียนผู้ป่วยนอก — เจ้าหน้าที่</h1>
   <span class="who" id="who"></span>
   <a class="ghost" id="tplLink" href="templates.html" style="display:none;padding:8px 14px;border-radius:7px;font-weight:600;text-decoration:none;background:rgba(255,255,255,.15);color:#fff">📄 จัดการแบบฟอร์ม</a>
-  <button class="ghost" id="editName" style="display:none">✎ ชื่อผู้พิมพ์</button>
+  <button class="ghost" id="editName" style="display:none">✎ ผู้พิมพ์ / หน่วย</button>
   <button class="ghost" id="logout" style="display:none">ออกจากระบบ</button>
 </header>
 
@@ -178,9 +178,14 @@
 </div>
 <div id="nameDlg" class="noprint" style="position:fixed;inset:0;background:rgba(10,25,50,.55);display:none;z-index:40;align-items:center;justify-content:center">
   <div style="background:#fff;border-radius:12px;padding:20px;width:min(420px,92vw)">
-    <h3 style="margin:0 0 4px;color:var(--navy)">ชื่อผู้พิมพ์</h3>
-    <div class="meta">ชื่อนี้จะพิมพ์ที่มุมซ้ายล่างของแบบฟอร์มทุกครั้งที่พิมพ์ (ไม่ใช่ชื่อบัญชีเข้าระบบ)</div>
-    <input type="text" id="myName" maxlength="100" placeholder="เช่น จ.อ.หญิง สมศรี ใจดี" style="width:100%;margin-top:12px">
+    <h3 style="margin:0 0 4px;color:var(--navy)">ข้อมูลผู้พิมพ์และหน่วย</h3>
+    <div class="meta">ใช้พิมพ์ลงแบบฟอร์มทุกครั้งที่บัญชีนี้พิมพ์ · ชื่อหน่วยและ SNC จะอยู่ในกรอบ "สถานพยาบาลปฐมภูมิ ทร." มุมขวาบน</div>
+    <label style="display:block;font-weight:600;font-size:14px;margin-top:12px">ชื่อผู้พิมพ์ <span style="color:#c0392b">*</span></label>
+    <input type="text" id="myName" maxlength="100" placeholder="เช่น จ.อ.หญิง สมศรี ใจดี" style="width:100%">
+    <label style="display:block;font-weight:600;font-size:14px;margin-top:10px">ชื่อหน่วย</label>
+    <input type="text" id="myUnit" maxlength="150" placeholder="เช่น รพ.ฐท.พง." style="width:100%">
+    <label style="display:block;font-weight:600;font-size:14px;margin-top:10px">SNC</label>
+    <input type="text" id="mySnc" maxlength="50" placeholder="รหัสหน่วย" style="width:100%">
     <div class="msg" id="nameMsg"></div>
     <div class="btnrow" style="margin-top:12px;justify-content:flex-end">
       <button class="ghost" id="nameCancel">ยกเลิก</button><button class="primary" id="nameSave">บันทึก</button>
@@ -212,17 +217,18 @@ let ME={email:'',name:''};
   sb.auth.onAuthStateChange((ev,s)=>{ if(ev==='SIGNED_OUT') showLogin(); });
 })();
 
-function showMe(){ $('#who').textContent=(ME.name?ME.name+' · ':'')+ME.email; }
-function openNameDlg(first){ $('#myName').value=ME.name||''; msg($('#nameMsg'),first?'กรุณาตั้งชื่อผู้พิมพ์ก่อนใช้งาน':'' ,'info'); $('#nameDlg').style.display='flex'; setTimeout(()=>$('#myName').focus(),50); }
+function showMe(){ $('#who').textContent=[ME.name,ME.unit_name,ME.email].filter(Boolean).join(' · '); }
+function openNameDlg(first){ $('#myName').value=ME.name||''; $('#myUnit').value=ME.unit_name||''; $('#mySnc').value=ME.snc||''; msg($('#nameMsg'),first?'กรุณาตั้งชื่อผู้พิมพ์ก่อนใช้งาน':'' ,'info'); $('#nameDlg').style.display='flex'; setTimeout(()=>$('#myName').focus(),50); }
 $('#editName').onclick=()=>openNameDlg(false);
 $('#nameCancel').onclick=()=>$('#nameDlg').style.display='none';
 $('#nameSave').onclick=async()=>{
   const v=$('#myName').value.trim(); if(!v) return msg($('#nameMsg'),'กรุณาใส่ชื่อ');
-  const {data,error}=await sb.rpc('set_my_name',{p_name:v});
+  const u=$('#myUnit').value.trim(), sn=$('#mySnc').value.trim();
+  const {error}=await sb.rpc('set_my_profile',{p_name:v,p_unit:u,p_snc:sn});
   if(error) return msg($('#nameMsg'),'บันทึกไม่สำเร็จ: '+error.message);
-  ME.name=data; showMe(); $('#nameDlg').style.display='none'; if(cur) drawSheet();
+  ME.name=v; ME.unit_name=u; ME.snc=sn; showMe(); $('#nameDlg').style.display='none'; if(cur) drawSheet();
 };
-$('#myName').addEventListener('keydown',e=>{ if(e.key==='Enter') $('#nameSave').click(); });
+['#myName','#myUnit','#mySnc'].forEach(s=>$(s).addEventListener('keydown',e=>{ if(e.key==='Enter') $('#nameSave').click(); }));
 function showLogin(){ clearInterval(timer); $('#editName').style.display='none'; $('#tplLink').style.display='none'; $('#app').style.display='none'; $('#login').style.display='block'; $('#logout').style.display='none'; $('#who').textContent=''; }
 $('#lf').onsubmit=async e=>{
   e.preventDefault(); $('#lbtn').disabled=true; msg($('#lmsg'),'');
@@ -304,8 +310,8 @@ async function openDetail(id){
 }
 let curTpl=FormSheet.BUILTIN;
 function drawSheet(){
-  const d={...(cur.data||{}), cid:cur.cid, hn:$('#dHn').value.trim()};
-  curItems=FormSheet.layout(d,new Date(cur.created_at),CFG.UNIT_NAME||'',curTpl);
+  const d={...(cur.data||{}), cid:cur.cid, hn:$('#dHn').value.trim(), snc:ME.snc||''};
+  curItems=FormSheet.layout(d,new Date(cur.created_at),ME.unit_name||CFG.UNIT_NAME||'',curTpl);   // ชื่อหน่วย/SNC ของเจ้าหน้าที่ที่พิมพ์
   FormSheet.mount($('#dWrap .sheet'),curTpl);
   // มุมซ้ายล่าง: ผู้พิมพ์ (บัญชีที่ล็อกอินอยู่) + วันเวลาที่พิมพ์
   const pt=new Date().toLocaleString('th-TH',{day:'numeric',month:'short',year:'2-digit',hour:'2-digit',minute:'2-digit'});
