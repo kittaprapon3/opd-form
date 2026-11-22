@@ -267,6 +267,7 @@ function detect({lines,W,H},cv){
   textField('date',find(/วันเดือนปี(?!เกิด)/));
   textField('time',find(/เวลา/));
   textField('hn',find(/HN/));
+  textField('opd',find(/เลขที่OPD\.?|OPD\.?/));
   // ผู้รับบริการ
   const svc=after(/สำหรับผู้รับบริการ/);
   textField('fullname',find(/ยศ-?ชื่อ-?สกุล/,svc)||find(/ชื่อ-?สกุล/,svc));
@@ -348,7 +349,7 @@ $('#usePage').onclick=async()=>{
 const SAMPLE={rank:'จ.ต.',fname:'สมชาย',lname:'ใจดี',fullname:'จ.ต.สมชาย ใจดี',sex:'ชาย',age:'30',dob:'1996-05-10',unit:'รพ.ฐท.พง.',occupation:'ทหารเรือ',religion:'พุทธ',
   marital:'โสด',cid:'1101700230708',goldcard:'ท12345',conscript:'1/2569',a_no:'12/3',a_moo:'5',a_soi:'สุขใจ',a_road:'เพชรเกษม',a_tambon:'ท้ายเหมือง',a_amphoe:'ท้ายเหมือง',a_prov:'พังงา',
   c_no:'99',c_moo:'1',c_soi:'-',c_road:'-',c_tambon:'ลำแก่น',c_amphoe:'ท้ายเหมือง',c_prov:'พังงา',phone:'0812345678',blood:'โอ',rh:'บวก',allergy:'แพ้',drug:'Penicillin',reaction:'ผื่น',
-  snc:'SNC-0001',disease:'ไม่มี',ec_name:'นางมาลี ใจดี',ec_rel:'มารดา',ec_addr:'12/3 ม.5 ต.ท้ายเหมือง',ec_phone:'0899999999',signerRole:'ผู้ให้ข้อมูล',signerRel:'บุตร',hn:'65-12345',
+  snc:'SNC-0001',disease:'ไม่มี',ec_name:'นางมาลี ใจดี',ec_rel:'มารดา',ec_addr:'12/3 ม.5 ต.ท้ายเหมือง',ec_phone:'0899999999',signerRole:'ผู้ให้ข้อมูล',signerRel:'บุตร',hn:'65-12345',opd:'OPD-001',
   signature:'data:image/svg+xml;base64,'+btoa('<svg xmlns="http://www.w3.org/2000/svg" width="200" height="50"><path d="M5 35 C30 5 45 45 70 20 S110 40 130 15 S170 30 195 22" stroke="#0a1f6b" stroke-width="3" fill="none"/></svg>')};
 
 function openEditor(tpl,meta){

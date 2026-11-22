@@ -122,7 +122,7 @@
   <div class="msg" id="amsg"></div>
   <div class="tablewrap">
     <table>
-      <thead><tr><th>เลขที่คำขอ</th><th>เวลา</th><th>ยศ-ชื่อ-สกุล</th><th>เลขบัตรประชาชน</th><th>โทรศัพท์</th><th>สถานะ</th><th>HN</th></tr></thead>
+      <thead><tr><th>เลขที่คำขอ</th><th>เวลา</th><th>ยศ-ชื่อ-สกุล</th><th>เลขบัตรประชาชน</th><th>โทรศัพท์</th><th>สถานะ</th><th>HN / OPD</th></tr></thead>
       <tbody id="rows"></tbody>
     </table>
   </div>
@@ -140,7 +140,7 @@
         <div class="kv" id="dKv"></div>
       </div>
       <div class="card">
-        <label>HN</label><input type="text" id="dHn" maxlength="30">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><div><label>HN</label><input type="text" id="dHn" maxlength="30"></div><div><label>เลขที่ OPD</label><input type="text" id="dOpd" maxlength="30"></div></div>
         <label>สถานะ</label>
         <select id="dStatus"><option>รอดำเนินการ</option><option>ออก HN แล้ว</option><option>ข้อมูลไม่ครบ/ติดต่อกลับ</option><option>ยกเลิก</option></select>
         <label>หมายเหตุ</label><textarea id="dNote" rows="2" maxlength="500"></textarea>
@@ -265,7 +265,7 @@ function baseQuery(cols){
   const term=$('#q').value.trim().replace(/[,()*%\\]/g,' ').trim();
   if(term){
     const digits=term.replace(/\D/g,'');
-    const ors=[`ref.ilike.*${term}*`,`fullname.ilike.*${term}*`,`phone.ilike.*${term}*`,`hn.ilike.*${term}*`];
+    const ors=[`ref.ilike.*${term}*`,`fullname.ilike.*${term}*`,`phone.ilike.*${term}*`,`hn.ilike.*${term}*`,`opd_no.ilike.*${term}*`];
     if(digits.length>=4) ors.push(`cid.ilike.*${digits}*`);
     q=q.or(ors.join(','));
   }else{
@@ -275,7 +275,7 @@ function baseQuery(cols){
   return q;
 }
 async function load(reset){
-  const {data,error}=await baseQuery('id,ref,created_at,status,hn,note,cid,fullname,phone,printed_at');
+  const {data,error}=await baseQuery('id,ref,created_at,status,hn,opd_no,note,cid,fullname,phone,printed_at');
   if(error){ if(/JWT|auth/i.test(error.message)) return showLogin(); return msg($('#amsg'),'โหลดข้อมูลไม่สำเร็จ: '+error.message); }
   msg($('#amsg'),'');
   const fresh=reset?new Set():new Set(data.filter(r=>seen.size&&!seen.has(r.id)).map(r=>r.id));
@@ -284,7 +284,7 @@ async function load(reset){
   $('#rows').innerHTML=rows.length?rows.map(r=>`<tr data-id="${r.id}" class="${fresh.has(r.id)?'new':''}">
       <td class="mono"><b>${esc(r.ref)}</b></td><td>${$('#q').value.trim()?dt(r.created_at):tm(r.created_at)}</td>
       <td class="name">${esc(r.fullname)}</td><td class="mono">${fmtCID(r.cid)}</td><td class="mono">${esc(r.phone||'')}</td>
-      <td>${stBadge(r.status)}${r.printed_at?' <span title="พิมพ์แล้ว">🖨</span>':''}</td><td class="mono">${esc(r.hn||'')}</td></tr>`).join('')
+      <td>${stBadge(r.status)}${r.printed_at?' <span title="พิมพ์แล้ว">🖨</span>':''}</td><td class="mono">${esc(r.hn||'')}${r.opd_no?'<br><span class="meta">OPD '+esc(r.opd_no)+'</span>':''}</td></tr>`).join('')
     :`<tr><td colspan="7" class="empty">ไม่มีคำขอ</td></tr>`;
   const c=s=>rows.filter(r=>r.status===s).length;
   $('#stats').innerHTML=`<div class="stat">ทั้งหมด<b>${rows.length}</b></div>`+STATUS.map(s=>`<div class="stat">${stBadge(s)}<b>${c(s)}</b></div>`).join('');
@@ -304,7 +304,7 @@ async function openDetail(id){
   const kv=[['ชื่อ',r.fullname],['เลขบัตร',fmtCID(r.cid)],['เพศ/อายุ',`${d.sex||''} ${d.age?d.age+' ปี':''}`],['วันเกิด',FormSheet.thDate(d.dob)],
     ['โทร',r.phone],['ที่อยู่',addr],['แพ้ยา',d.allergy==='แพ้'?`แพ้ ${d.drug||''} (${d.reaction||''})`:d.allergy],['โรคประจำตัว',d.disease],['ส่งเมื่อ',dt(r.created_at)]];
   $('#dKv').innerHTML=kv.map(([k,v])=>`<div>${k}</div><div>${esc(v||'-')}</div>`).join('');
-  $('#dHn').value=r.hn||''; $('#dStatus').value=r.status; $('#dNote').value=r.note||''; $('#dSaved').textContent='';
+  $('#dHn').value=r.hn||''; $('#dOpd').value=r.opd_no||''; $('#dStatus').value=r.status; $('#dNote').value=r.note||''; $('#dSaved').textContent='';
   $('#dMeta').textContent=[r.updated_at?`แก้ไขล่าสุด ${dt(r.updated_at)} โดย ${r.updated_by||'-'}`:'', r.printed_at?`พิมพ์แล้ว ${r.print_count} ครั้ง ล่าสุด ${dt(r.printed_at)} โดย ${r.printed_by||'-'}`:'', (r.edit_log&&r.edit_log.length)?`แก้ข้อมูลคนไข้ ${r.edit_log.length} ครั้ง ล่าสุด ${dt(r.edit_log[r.edit_log.length-1].at)} โดย ${r.edit_log[r.edit_log.length-1].by||'-'} (${Object.keys(r.edit_log[r.edit_log.length-1].changes||{}).length} ช่อง)`:''].filter(Boolean).join(' · ');
   curTpl=await FormSheet.loadTemplate(sb,(r.data||{}).template_id);   // พิมพ์ด้วยแบบฟอร์มฉบับที่คนไข้กรอกตอนส่ง
   drawSheet();
@@ -312,7 +312,7 @@ async function openDetail(id){
 }
 let curTpl=FormSheet.BUILTIN;
 function drawSheet(){
-  const d={...(cur.data||{}), cid:cur.cid, hn:$('#dHn').value.trim(), snc:ME.snc||''};
+  const d={...(cur.data||{}), cid:cur.cid, hn:$('#dHn').value.trim(), opd:$('#dOpd').value.trim(), snc:ME.snc||''};
   curItems=FormSheet.layout(d,new Date(cur.created_at),ME.unit_name||CFG.UNIT_NAME||'',curTpl);   // ชื่อหน่วย/SNC ของเจ้าหน้าที่ที่พิมพ์
   FormSheet.mount($('#dWrap .sheet'),curTpl);
   // มุมซ้ายล่าง: ผู้พิมพ์ (บัญชีที่ล็อกอินอยู่) + วันเวลาที่พิมพ์
@@ -324,12 +324,12 @@ function drawSheet(){
   const w=Math.min(window.innerWidth-48, 794);
   FormSheet.fit($('#dWrap'),$('#dWrap .sheet'),w);
 }
-$('#dHn').oninput=drawSheet;
+$('#dHn').oninput=drawSheet; $('#dOpd').oninput=drawSheet;
 $('#dClose').onclick=()=>{ $('#detail').style.display='none'; cur=null; };
 document.addEventListener('keydown',e=>{ if(e.key!=='Escape') return; if($('#editDlg').style.display==='block') return closeEdit(); if(cur) $('#dClose').click(); });
 $('#dSave').onclick=async()=>{
   const b=$('#dSave'); b.disabled=true;
-  const upd={hn:$('#dHn').value.trim()||null,status:$('#dStatus').value,note:$('#dNote').value.trim()||null};
+  const upd={hn:$('#dHn').value.trim()||null,opd_no:$('#dOpd').value.trim()||null,status:$('#dStatus').value,note:$('#dNote').value.trim()||null};
   if(upd.status==='ออก HN แล้ว'&&!upd.hn){ b.disabled=false; return $('#dSaved').textContent='กรุณาใส่ HN ก่อน'; }
   const {error}=await sb.from('requests').update(upd).eq('id',cur.id);
   b.disabled=false;
@@ -400,9 +400,9 @@ $('#eSave').onclick=async()=>{
 };
 /* ---------- Export Excel (CSV UTF-8) ---------- */
 $('#export').onclick=async()=>{
-  const {data,error}=await baseQuery('ref,created_at,status,hn,note,cid,fullname,phone,data');
+  const {data,error}=await baseQuery('ref,created_at,status,hn,opd_no,note,cid,fullname,phone,data');
   if(error) return msg($('#amsg'),'Export ไม่สำเร็จ: '+error.message);
-  const F=[['ref','เลขที่คำขอ'],['created_at','วันเวลาที่ส่ง'],['status','สถานะ'],['hn','HN'],['note','หมายเหตุ'],['fullname','ยศ-ชื่อ-สกุล'],['rank','ยศ/คำนำหน้า'],['fname','ชื่อ'],['lname','นามสกุล'],
+  const F=[['ref','เลขที่คำขอ'],['created_at','วันเวลาที่ส่ง'],['status','สถานะ'],['hn','HN'],['opd_no','เลขที่ OPD'],['note','หมายเหตุ'],['fullname','ยศ-ชื่อ-สกุล'],['rank','ยศ/คำนำหน้า'],['fname','ชื่อ'],['lname','นามสกุล'],
     ['sex','เพศ'],['dob','วันเกิด'],['age','อายุ'],['cid','เลขบัตรประชาชน'],['unit','สังกัด'],['occupation','อาชีพ'],['religion','ศาสนา'],['marital','สถานะสมรส'],['goldcard','บัตรทอง ท/R'],['conscript','ผลัด/ปี'],
     ['a_no','บ้านเลขที่'],['a_moo','หมู่'],['a_soi','ซอย'],['a_road','ถนน'],['a_tambon','ตำบล'],['a_amphoe','อำเภอ'],['a_prov','จังหวัด'],
     ['c_no','ปัจจุบัน-บ้านเลขที่'],['c_moo','ปัจจุบัน-หมู่'],['c_soi','ปัจจุบัน-ซอย'],['c_road','ปัจจุบัน-ถนน'],['c_tambon','ปัจจุบัน-ตำบล'],['c_amphoe','ปัจจุบัน-อำเภอ'],['c_prov','ปัจจุบัน-จังหวัด'],
