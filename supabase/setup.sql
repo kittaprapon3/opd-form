@@ -123,3 +123,55 @@ revoke all on function public.requests_touch() from public, anon, authenticated;
 --   ('staff1@example.com', 'ชื่อเจ้าหน้าที่ 1'),
 --   ('staff2@example.com', 'ชื่อเจ้าหน้าที่ 2')
 -- on conflict (email) do nothing;
+
+-- =====================================================================
+--  (เพิ่มเติม) ชื่อผู้พิมพ์ของเจ้าหน้าที่ + บันทึกการพิมพ์
+-- =====================================================================
+alter table public.requests add column if not exists printed_at timestamptz;
+alter table public.requests add column if not exists printed_by text;
+alter table public.requests add column if not exists print_count int not null default 0;
+
+create or replace function public.my_profile() returns table(email text, name text)
+language sql stable security definer set search_path = public as $$
+  select s.email, s.name from public.staff s
+  where lower(s.email) = lower(coalesce(auth.jwt() ->> 'email',''));
+$$;
+
+create or replace function public.set_my_name(p_name text) returns text
+language plpgsql security definer set search_path = public as $$
+declare v text := left(trim(coalesce(p_name,'')), 100);
+begin
+  if not public.is_staff() then raise exception 'ไม่มีสิทธิ์'; end if;
+  if v = '' then raise exception 'กรุณาใส่ชื่อ'; end if;
+  update public.staff set name = v where lower(email) = lower(auth.jwt() ->> 'email');
+  return v;
+end $$;
+
+create or replace function public.mark_printed(p_id uuid) returns void
+language plpgsql security definer set search_path = public as $$
+declare v_who text;
+begin
+  if not public.is_staff() then raise exception 'ไม่มีสิทธิ์'; end if;
+  select coalesce(nullif(s.name,''), s.email) into v_who from public.staff s
+   where lower(s.email) = lower(auth.jwt() ->> 'email');
+  update public.requests set printed_at = now(), printed_by = v_who, print_count = print_count + 1 where id = p_id;
+end $$;
+
+-- การพิมพ์ไม่นับเป็น "แก้ไข"
+create or replace function public.requests_touch() returns trigger
+language plpgsql set search_path = public as $$
+begin
+  if new.status is distinct from old.status or new.hn is distinct from old.hn or new.note is distinct from old.note then
+    new.updated_at := now();
+    new.updated_by := coalesce(auth.jwt() ->> 'email', new.updated_by);
+  end if;
+  return new;
+end $$;
+
+revoke all on function public.my_profile() from public, anon;
+revoke all on function public.set_my_name(text) from public, anon;
+revoke all on function public.mark_printed(uuid) from public, anon;
+revoke all on function public.requests_touch() from public, anon, authenticated;
+grant execute on function public.my_profile() to authenticated;
+grant execute on function public.set_my_name(text) to authenticated;
+grant execute on function public.mark_printed(uuid) to authenticated;

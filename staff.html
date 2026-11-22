@@ -70,7 +70,7 @@
 
   @media print{
     body{background:#fff}
-    body>*:not(#detail),.dside,.noprint{display:none!important}
+    body>*:not(#detail),.dside,.noprint,#nameDlg{display:none!important}
     #detail{position:static;display:block!important;background:#fff;overflow:visible}
     .dbox{display:block;margin:0;padding:0;background:#fff}
   }
@@ -80,6 +80,7 @@
 <header>
   <h1>คำขอมีเวชระเบียนผู้ป่วยนอก — เจ้าหน้าที่</h1>
   <span class="who" id="who"></span>
+  <button class="ghost" id="editName" style="display:none">✎ ชื่อผู้พิมพ์</button>
   <button class="ghost" id="logout" style="display:none">ออกจากระบบ</button>
 </header>
 
@@ -150,6 +151,18 @@
   </div>
 </div>
 
+
+<div id="nameDlg" class="noprint" style="position:fixed;inset:0;background:rgba(10,25,50,.55);display:none;z-index:40;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:12px;padding:20px;width:min(420px,92vw)">
+    <h3 style="margin:0 0 4px;color:var(--navy)">ชื่อผู้พิมพ์</h3>
+    <div class="meta">ชื่อนี้จะพิมพ์ที่มุมซ้ายล่างของแบบฟอร์มทุกครั้งที่พิมพ์ (ไม่ใช่ชื่อบัญชีเข้าระบบ)</div>
+    <input type="text" id="myName" maxlength="100" placeholder="เช่น จ.อ.หญิง สมศรี ใจดี" style="width:100%;margin-top:12px">
+    <div class="msg" id="nameMsg"></div>
+    <div class="btnrow" style="margin-top:12px;justify-content:flex-end">
+      <button class="ghost" id="nameCancel">ยกเลิก</button><button class="primary" id="nameSave">บันทึก</button>
+    </div>
+  </div>
+</div>
 <script>
 const CFG=window.APP_CONFIG||{}, $=s=>document.querySelector(s), esc=FormSheet.esc;
 const STATUS=['รอดำเนินการ','ออก HN แล้ว','ข้อมูลไม่ครบ/ติดต่อกลับ','ยกเลิก'];
@@ -160,6 +173,7 @@ const dt=t=>new Date(t).toLocaleString('th-TH',{day:'numeric',month:'short',year
 function msg(el,text,kind){ el.className='msg'+(text?' '+(kind||'err'):''); el.textContent=text||''; }
 
 let sb=null, rows=[], seen=new Set(), timer=null, cur=null;
+let ME={email:'',name:''};
 
 /* ---------- เริ่มต้น ---------- */
 (async function init(){
@@ -174,7 +188,18 @@ let sb=null, rows=[], seen=new Set(), timer=null, cur=null;
   sb.auth.onAuthStateChange((ev,s)=>{ if(ev==='SIGNED_OUT') showLogin(); });
 })();
 
-function showLogin(){ clearInterval(timer); $('#app').style.display='none'; $('#login').style.display='block'; $('#logout').style.display='none'; $('#who').textContent=''; }
+function showMe(){ $('#who').textContent=(ME.name?ME.name+' · ':'')+ME.email; }
+function openNameDlg(first){ $('#myName').value=ME.name||''; msg($('#nameMsg'),first?'กรุณาตั้งชื่อผู้พิมพ์ก่อนใช้งาน':'' ,'info'); $('#nameDlg').style.display='flex'; setTimeout(()=>$('#myName').focus(),50); }
+$('#editName').onclick=()=>openNameDlg(false);
+$('#nameCancel').onclick=()=>$('#nameDlg').style.display='none';
+$('#nameSave').onclick=async()=>{
+  const v=$('#myName').value.trim(); if(!v) return msg($('#nameMsg'),'กรุณาใส่ชื่อ');
+  const {data,error}=await sb.rpc('set_my_name',{p_name:v});
+  if(error) return msg($('#nameMsg'),'บันทึกไม่สำเร็จ: '+error.message);
+  ME.name=data; showMe(); $('#nameDlg').style.display='none'; if(cur) drawSheet();
+};
+$('#myName').addEventListener('keydown',e=>{ if(e.key==='Enter') $('#nameSave').click(); });
+function showLogin(){ clearInterval(timer); $('#editName').style.display='none'; $('#app').style.display='none'; $('#login').style.display='block'; $('#logout').style.display='none'; $('#who').textContent=''; }
 $('#lf').onsubmit=async e=>{
   e.preventDefault(); $('#lbtn').disabled=true; msg($('#lmsg'),'');
   const {data,error}=await sb.auth.signInWithPassword({email:$('#email').value.trim(),password:$('#pw').value});
@@ -188,7 +213,10 @@ async function enter(session){
   const {data:ok}=await sb.rpc('is_staff');
   if(!ok){ await sb.auth.signOut(); showLogin(); return msg($('#lmsg'),'บัญชีนี้ไม่มีสิทธิ์เข้าหน้าเจ้าหน้าที่ กรุณาติดต่อผู้ดูแลระบบ'); }
   $('#login').style.display='none'; $('#app').style.display='block'; $('#logout').style.display='';
-  $('#who').textContent=session.user.email;
+  ME={email:session.user.email,name:''};
+  try{ const {data}=await sb.rpc('my_profile'); if(data&&data[0]) ME=data[0]; }catch(e){}
+  showMe(); $('#editName').style.display='';
+  if(!ME.name) openNameDlg(true);
   await load(true);
   clearInterval(timer); timer=setInterval(()=>{ if($('#detail').style.display!=='block') load(); },30000);
 }
@@ -215,7 +243,7 @@ function baseQuery(cols){
   return q;
 }
 async function load(reset){
-  const {data,error}=await baseQuery('id,ref,created_at,status,hn,note,cid,fullname,phone');
+  const {data,error}=await baseQuery('id,ref,created_at,status,hn,note,cid,fullname,phone,printed_at');
   if(error){ if(/JWT|auth/i.test(error.message)) return showLogin(); return msg($('#amsg'),'โหลดข้อมูลไม่สำเร็จ: '+error.message); }
   msg($('#amsg'),'');
   const fresh=reset?new Set():new Set(data.filter(r=>seen.size&&!seen.has(r.id)).map(r=>r.id));
@@ -224,7 +252,7 @@ async function load(reset){
   $('#rows').innerHTML=rows.length?rows.map(r=>`<tr data-id="${r.id}" class="${fresh.has(r.id)?'new':''}">
       <td class="mono"><b>${esc(r.ref)}</b></td><td>${$('#q').value.trim()?dt(r.created_at):tm(r.created_at)}</td>
       <td class="name">${esc(r.fullname)}</td><td class="mono">${fmtCID(r.cid)}</td><td class="mono">${esc(r.phone||'')}</td>
-      <td>${stBadge(r.status)}</td><td class="mono">${esc(r.hn||'')}</td></tr>`).join('')
+      <td>${stBadge(r.status)}${r.printed_at?' <span title="พิมพ์แล้ว">🖨</span>':''}</td><td class="mono">${esc(r.hn||'')}</td></tr>`).join('')
     :`<tr><td colspan="7" class="empty">ไม่มีคำขอ</td></tr>`;
   const c=s=>rows.filter(r=>r.status===s).length;
   $('#stats').innerHTML=`<div class="stat">ทั้งหมด<b>${rows.length}</b></div>`+STATUS.map(s=>`<div class="stat">${stBadge(s)}<b>${c(s)}</b></div>`).join('');
@@ -245,13 +273,17 @@ async function openDetail(id){
     ['โทร',r.phone],['ที่อยู่',addr],['แพ้ยา',d.allergy==='แพ้'?`แพ้ ${d.drug||''} (${d.reaction||''})`:d.allergy],['โรคประจำตัว',d.disease],['ส่งเมื่อ',dt(r.created_at)]];
   $('#dKv').innerHTML=kv.map(([k,v])=>`<div>${k}</div><div>${esc(v||'-')}</div>`).join('');
   $('#dHn').value=r.hn||''; $('#dStatus').value=r.status; $('#dNote').value=r.note||''; $('#dSaved').textContent='';
-  $('#dMeta').textContent=r.updated_at?`แก้ไขล่าสุด ${dt(r.updated_at)} โดย ${r.updated_by||'-'}`:'';
+  $('#dMeta').textContent=[r.updated_at?`แก้ไขล่าสุด ${dt(r.updated_at)} โดย ${r.updated_by||'-'}`:'', r.printed_at?`พิมพ์แล้ว ${r.print_count} ครั้ง ล่าสุด ${dt(r.printed_at)} โดย ${r.printed_by||'-'}`:''].filter(Boolean).join(' · ');
   drawSheet();
   $('#detail').style.display='block'; $('#detail').scrollTop=0;
 }
 function drawSheet(){
   const d={...(cur.data||{}), cid:cur.cid, hn:$('#dHn').value.trim()};
   curItems=FormSheet.layout(d,new Date(cur.created_at),CFG.UNIT_NAME||'');
+  // มุมซ้ายล่าง: ผู้พิมพ์ (บัญชีที่ล็อกอินอยู่) + วันเวลาที่พิมพ์
+  const pt=new Date().toLocaleString('th-TH',{day:'numeric',month:'short',year:'2-digit',hour:'2-digit',minute:'2-digit'});
+  curItems.push({k:'f',x1:40,x2:285,top:786,fs:9.5,val:`ผู้พิมพ์: ${ME.name||'-'} (${ME.email})`});
+  curItems.push({k:'f',x1:40,x2:285,top:799,fs:9.5,val:`พิมพ์เมื่อ: ${pt}`});
   $('#dSheet').innerHTML=FormSheet.html(curItems);
   const w=Math.min(window.innerWidth-48, 794);
   FormSheet.fit($('#dWrap'),$('#dWrap .sheet'),w);
@@ -268,9 +300,11 @@ $('#dSave').onclick=async()=>{
   if(error) return $('#dSaved').textContent='บันทึกไม่สำเร็จ: '+error.message;
   Object.assign(cur,upd); $('#dSaved').textContent='บันทึกแล้ว ✓'; load();
 };
-$('#dPrint').onclick=()=>window.print();
+async function logPrint(){ try{ await sb.rpc('mark_printed',{p_id:cur.id}); }catch(e){} }
+$('#dPrint').onclick=()=>{ if(!ME.name) return openNameDlg(true); drawSheet(); logPrint(); setTimeout(()=>window.print(),50); };
 $('#dPdf').onclick=async()=>{
-  const b=$('#dPdf'); b.disabled=true;
+  if(!ME.name) return openNameDlg(true);
+  const b=$('#dPdf'); b.disabled=true; drawSheet(); logPrint();
   try{ (await FormSheet.pdf(curItems)).save(`${cur.ref}_${(cur.fullname||'').replace(/[\\/:*?"<>|\s]+/g,'_')}.pdf`); }
   catch(e){ alert('สร้าง PDF ไม่สำเร็จ: '+e.message); }
   b.disabled=false;

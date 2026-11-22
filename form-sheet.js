@@ -38,6 +38,7 @@ const FormSheet={
   html(items){
     return items.map(x=>
       x.k==='t'?`<div class="v" style="left:${x.x1}pt;width:${x.x2-x.x1}pt;top:${x.top}pt;font-size:${x.fs}pt">${esc(x.val)}</div>`:
+      x.k==='f'?`<div class="ft" style="left:${x.x1}pt;width:${x.x2-x.x1}pt;top:${x.top}pt;font-size:${x.fs}pt">${esc(x.val)}</div>`:
       x.k==='c'?`<div class="ck" style="left:${x.x}pt;top:${x.y}pt">✓</div>`:
       x.k==='d'?`<div class="idc" style="left:${x.x}pt;top:${x.y}pt">${esc(x.val)}</div>`:
       `<img class="sigimg" src="${esc(x.src)}" style="left:${x.x}pt;width:${x.w}pt;top:${x.y}pt;height:${x.h}pt">`).join('');
@@ -58,6 +59,7 @@ const FormSheet={
   for(const x of items){
     if(x.k==='t'){ g.save(); g.beginPath(); g.rect(x.x1*S,x.top*S,(x.x2-x.x1)*S,15*S); g.clip();
       g.font=`600 ${x.fs*S}px Sarabun, Tahoma, sans-serif`; g.fillText(x.val,(x.x1+3)*S,(x.top+7.8)*S); g.restore(); }
+    else if(x.k==='f'){ g.save(); g.fillStyle='#222'; g.font=`400 ${x.fs*S}px Sarabun, Tahoma, sans-serif`; g.fillText(x.val,x.x1*S,(x.top+6)*S); g.fillStyle='#0a2a8a'; g.restore(); }
     else if(x.k==='c'){ g.font=`700 ${11*S}px Sarabun, sans-serif`; g.textAlign='center'; g.fillText('✓',(x.x+4.8)*S,(x.y+4.6)*S); g.textAlign='left'; }
     else if(x.k==='d'){ g.font=`700 ${12*S}px Sarabun, sans-serif`; g.textAlign='center'; g.fillText(x.val,(x.x+7.2)*S,(x.y+7.8)*S); g.textAlign='left'; }
     else if(x.k==='s'){ const im=await load(x.src), r=Math.min(x.w/im.width,x.h/im.height), w=im.width*r, h=im.height*r;
