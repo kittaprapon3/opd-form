@@ -72,6 +72,8 @@
   .egrid h4{grid-column:1/-1;margin:8px 0 0;color:var(--navy);font-size:14.5px;border-bottom:1px solid var(--line);padding-bottom:3px}
   .egrid label{display:block;font-size:12.5px;font-weight:600;color:#43597a;margin:0 0 2px}
   .egrid input,.egrid select{width:100%;padding:6px 8px}
+  .dobrow{display:grid;grid-template-columns:.8fr 1.5fr 1fr;gap:6px}
+  .egrid .chg select{background:#fff8d6;border-color:#e0b100}
   .egrid .w2{grid-column:span 2}.egrid .w4{grid-column:1/-1}
   .egrid .chg input,.egrid .chg select{background:#fff8d6;border-color:#e0b100}
   @media(max-width:700px){.egrid{grid-template-columns:repeat(2,1fr)}}
@@ -358,6 +360,7 @@ const EF=[ ['h','ข้อมูลผู้รับบริการ'],
   ['h','ผู้ที่ติดต่อได้'],['ec_name','ชื่อ-สกุล',null,'w2'],['ec_rel','เกี่ยวข้องเป็น'],['ec_phone','เบอร์โทร'],['ec_addr','ที่อยู่',null,'w4'],
   ['h','ผู้ลงชื่อ'],['signerRole','ผู้ลงชื่อเป็น',['ผู้ป่วย','ผู้ให้ข้อมูล']],['signerRel','ความสัมพันธ์'] ];
 let eOrig=null;
+const TH_MONTHS=['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
 function joinName(r,f,l){ r=(r||'').trim(); const en=/^(Mr|Mrs|Miss|Ms|Master)\.?$/i.test(r); return ((r?(r.endsWith('.')&&!en?r:r+' '):'')+(f||'').trim()+' '+(l||'').trim()).trim(); }
 function validCID(s){const d=String(s||'').replace(/\D/g,'');if(d.length!==13)return false;let t=0;for(let i=0;i<12;i++)t+=+d[i]*(13-i);return (11-t%11)%10===+d[12];}
 $('#dEdit').onclick=()=>{
@@ -366,6 +369,9 @@ $('#dEdit').onclick=()=>{
   $('#eForm').innerHTML=EF.map(([k,lb,opt,cls])=>{
     if(k==='h') return `<h4>${lb}</h4>`;
     const v=k==='cid'?fmtCID(d.cid):(d[k]??''); eOrig[k]=String(v);
+    if(opt==='date'){ const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(v)||[], be=new Date().getFullYear()+543;
+      const sel=(cls,first,items,cur)=>`<select class="${cls}"><option value="">${first}</option>${items.map(([val,t])=>`<option value="${val}" ${String(val)===String(cur)?'selected':''}>${t}</option>`).join('')}</select>`;
+      return `<div class="w2"><label>${lb}</label><span class="dobrow">${sel('dD','วันที่',Array.from({length:31},(_,i)=>[i+1,i+1]),m[3]?+m[3]:'')}${sel('dM','เดือน',TH_MONTHS.map((t,i)=>[i+1,t]),m[2]?+m[2]:'')}${sel('dY','ปี พ.ศ.',Array.from({length:121},(_,i)=>[be-i,be-i]),m[1]?+m[1]+543:'')}</span><input type="hidden" data-k="${k}" value="${esc(v)}"></div>`; }
     const inp=Array.isArray(opt)?`<select data-k="${k}">${opt.map(o=>`<option ${o===v?'selected':''} value="${esc(o)}">${esc(o||'-')}</option>`).join('')}</select>`
       :`<input data-k="${k}" type="${opt==='date'?'date':'text'}" value="${esc(v)}">`;
     return `<div class="${cls||''}"><label>${lb}</label>${inp}</div>`;
@@ -373,6 +379,9 @@ $('#dEdit').onclick=()=>{
   $('#editDlg').style.display='block';
 };
 $('#eForm').addEventListener('input',e=>{ const el=e.target.closest('[data-k]'); if(el) el.parentElement.classList.toggle('chg',el.value!==eOrig[el.dataset.k]); });
+$('#eForm').addEventListener('change',e=>{ const row=e.target.closest('.dobrow'); if(row){
+    const [D,M,Y]=['.dD','.dM','.dY'].map(c=>row.querySelector(c).value), hid=row.parentElement.querySelector('[data-k]');
+    hid.value=(D&&M&&Y)?`${Y-543}-${String(M).padStart(2,'0')}-${String(D).padStart(2,'0')}`:''; row.parentElement.classList.toggle('chg',hid.value!==eOrig[hid.dataset.k]); return; } });
 $('#eForm').addEventListener('change',e=>{ const el=e.target.closest('[data-k]'); if(el) el.parentElement.classList.toggle('chg',el.value!==eOrig[el.dataset.k]); });
 const closeEdit=()=>{ $('#editDlg').style.display='none'; };
 $('#eClose').onclick=$('#eCancel').onclick=closeEdit;

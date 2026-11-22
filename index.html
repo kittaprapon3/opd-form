@@ -27,6 +27,8 @@
   label{display:block;font-size:14px;font-weight:600;margin-bottom:3px}
   label .req{color:var(--err)}
   input[type=text],input[type=tel],input[type=date],select{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:7px;font:inherit;background:#fff}
+  .dobrow{display:grid;grid-template-columns:.8fr 1.5fr 1fr;gap:6px}
+  .dobrow select{padding:9px 6px}
   input:focus,select:focus{outline:2px solid #9cc0f5;border-color:var(--accent)}
   .invalid{border-color:var(--err)!important;background:#fff6f5!important}
   .ocr{background:#fff8d6!important;border-color:#e0b100!important}
@@ -100,7 +102,9 @@
       <div class="c4"><label>นามสกุล <span class="req">*</span></label><input type="text" name="lname" required></div>
       <div class="c4"><label>เพศ <span class="req">*</span></label>
         <select name="sex" required><option value="">-- เลือก --</option><option>ชาย</option><option>หญิง</option></select></div>
-      <div class="c4"><label>วัน เดือน ปีเกิด <span class="req">*</span></label><input type="date" name="dob" required></div>
+      <div class="c4"><label>วัน เดือน ปีเกิด <span class="req">*</span></label>
+        <span class="dobrow"><select id="dobD" required aria-label="วันที่"><option value="">วันที่</option></select><select id="dobM" required aria-label="เดือน"><option value="">เดือน</option></select><select id="dobY" required aria-label="ปี พ.ศ."><option value="">ปี พ.ศ.</option></select></span>
+        <input type="hidden" name="dob"></div>
       <div class="c4"><label>อายุ (ปี)</label><input type="text" name="age" readonly placeholder="คำนวณอัตโนมัติ"></div>
       <div class="c4"><label>สังกัด</label><input type="text" name="unit"></div>
       <div class="c4"><label>อาชีพ</label><input type="text" name="occupation"></div>
@@ -286,13 +290,29 @@ function sigDataURL(){
 }
 
 /* ---------- Form helpers ---------- */
+/* วันเกิด: แยก วัน / เดือนไทย / ปี พ.ศ.  เก็บจริงใน input ซ่อน name=dob (ค.ศ. yyyy-mm-dd) */
+const TH_MONTHS=['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+(function(){
+  const D=$('#dobD'), M=$('#dobM'), Y=$('#dobY'), be=new Date().getFullYear()+543;
+  for(let d=1;d<=31;d++) D.add(new Option(d,d));
+  TH_MONTHS.forEach((m,i)=>M.add(new Option(m,i+1)));
+  for(let y=be;y>=be-120;y--) Y.add(new Option(y,y));
+  const sync=()=>{
+    const d=+D.value, m=+M.value, y=+Y.value;
+    if(m&&y){ const max=new Date(y-543,m,0).getDate(); [...D.options].forEach(o=>{ if(o.value) o.disabled=+o.value>max; }); if(d>max){ D.value=''; } }
+    form.dob.value=(D.value&&m&&y)?`${y-543}-${String(m).padStart(2,'0')}-${String(D.value).padStart(2,'0')}`:'';
+    if(form.dob.value) calcAge(); else form.age.value='';
+  };
+  [D,M,Y].forEach(el=>el.addEventListener('change',()=>{ el.classList.remove('ocr','invalid'); sync(); }));
+  window.setDob=iso=>{ const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(iso||''); if(!m){ D.value=M.value=Y.value=''; form.dob.value=''; return; }
+    Y.value=String(+m[1]+543); M.value=String(+m[2]); D.value=String(+m[3]); sync(); };
+})();
 function calcAge(){
   const b=new Date(form.dob.value); if(isNaN(b)) return;
   const n=new Date(); let a=n.getFullYear()-b.getFullYear();
   if(n.getMonth()<b.getMonth()||(n.getMonth()===b.getMonth()&&n.getDate()<b.getDate())) a--;
   form.age.value=a;
 }
-form.dob.addEventListener('change',calcAge);
 function fmtCID(v){const d=v.replace(/\D/g,'').slice(0,13);let o='',i=0;for(const n of [1,4,5,2,1]){if(i>=d.length)break;o+=(o?'-':'')+d.slice(i,i+n);i+=n;}return o;}
 form.cid.addEventListener('input',()=>form.cid.value=fmtCID(form.cid.value));
 function validCID(s){const d=s.replace(/\D/g,'');if(d.length!==13)return false;let t=0;for(let i=0;i<12;i++)t+=+d[i]*(13-i);return (11-t%11)%10===+d[12];}
@@ -431,7 +451,7 @@ function applyOCR(o,src){
     const el=form.elements[k]; if(!el||!v) continue;
     el.value=v; el.classList.add('ocr'); n++;
   }
-  if(o.dob) calcAge();
+  if(o.dob){ setDob(o.dob); ['#dobD','#dobM','#dobY'].forEach(q=>$(q).classList.add('ocr')); }
   composeRank();
   if(o.a_no||o.a_tambon){ $('#sameAddr').checked=true; $('#curAddr').style.display='none'; }
   $('#ocrNote').style.display='block';
