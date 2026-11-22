@@ -223,9 +223,22 @@ async function pageLines(n){
   return {lines,W,H};
 }
 
+
+/* หาเส้นช่องกรอกเลขบัตร (ขีดสั้น ๆ ใต้บรรทัด) จากภาพที่เรนเดอร์ — คืนตำแหน่งซ้ายของแต่ละขีด (pt) */
+function slotRuns(cv,W,base,xFrom,xTo){
+  const S=cv.width/W, g=cv.getContext('2d'), best=[];
+  for(let yy=base-3; yy<=base+5; yy+=.5){
+    const y=Math.round(yy*S), x0=Math.round(xFrom*S), x1=Math.min(cv.width-1,Math.round(xTo*S));
+    const d=g.getImageData(x0,y,x1-x0,1).data, runs=[]; let st=-1;
+    for(let i=0;i<=x1-x0;i++){ const dark=i<x1-x0&&(d[i*4]+d[i*4+1]+d[i*4+2])/3<130;
+      if(dark&&st<0) st=i; if(!dark&&st>=0){ const len=(i-st)/S; if(len>=6&&len<=22) runs.push((x0+st)/S); st=-1; } }
+    if(runs.length>best.length) best.splice(0,best.length,...runs);
+  }
+  return best;
+}
 /* ---------------- วางช่องอัตโนมัติ ---------------- */
 const LEADER=/[.…_\-‥·•]/;
-function detect({lines,W,H}){
+function detect({lines,W,H},cv){
   const R=W-28, out={}, used=new Set();
   const find=(re,from=0,pred)=>{ // หา label ทีละบรรทัด คืน {L, i(start idx), j(end idx)}
     for(let li=from;li<lines.length;li++){ const L=lines[li]; re.lastIndex=0; let m;
@@ -237,7 +250,7 @@ function detect({lines,W,H}){
   const regionEnd=(L,j)=>{ // จบช่อง = ตัวอักษรถัดไปที่ไม่ใช่เส้นประ (= label ถัดไป) หรือสุดเส้นประ
     let k=j; while(k<L.cs.length&&LEADER.test(L.cs[k].ch)) k++;
     if(k<L.cs.length) return L.cs[k].x0-2;
-    return k>j?Math.min(R,L.cs[k-1].x1):R; };
+    return R; };   // ไม่มีข้อความต่อท้าย = ยาวถึงขอบขวา
   const textField=(key,h,opt={})=>{ if(!h) return; take(h); const L=h.L;
     const x1=(opt.xStart??L.cs[h.j-1].x1)+1, x2=Math.max(x1+20,regionEnd(L,h.j)-0);
     out[key]={key,type:'text',x1:+x1.toFixed(1),x2:+x2.toFixed(1),top:+(L.base-12.5).toFixed(1),...(opt.fs?{fs:opt.fs}:{})}; };
@@ -262,7 +275,8 @@ function detect({lines,W,H}){
   // เลขบัตรประชาชน 13 หลัก (1-4-5-2-1)
   { const h=take(find(/เลขที่บัตรประชาชน|เลขประจำตัวประชาชน/,svc)); if(h){ const L=h.L, x0=L.cs[h.j-1].x1+4, x1=Math.min(regionEnd(L,h.j),x0+270);
       const s=(x1-x0)/17, xs=[]; let x=x0; [1,4,5,2,1].forEach((n,gi)=>{ for(let k=0;k<n;k++){ xs.push(+x.toFixed(1)); x+=s; } x+=s; });
-      out.cid={key:'cid',type:'digits',y:+(L.base-12.5).toFixed(1),xs}; } }
+      out.cid={key:'cid',type:'digits',y:+(L.base-15).toFixed(1),xs};
+      const px=cv&&slotRuns(cv,W,L.base,L.cs[h.j-1].x1,x0+300); if(px&&px.length>=13) out.cid.xs=px.slice(0,13).map(v=>+v.toFixed(1)); } }
   // ที่อยู่: ชุดแรก = ตามบัตร, ชุดหลัง "ที่อยู่ปัจจุบัน" = ปัจจุบัน
   const curLi=after(/ที่อยู่ปัจจุบัน/), bloodLi=after(/หมู่เลือด/)||lines.length;
   for(const [p,from,to] of [['a',svc,curLi||bloodLi],['c',curLi,bloodLi]]){ if(p==='c'&&!curLi) continue;
@@ -279,9 +293,16 @@ function detect({lines,W,H}){
   // ช่องติ๊ก: หาคำตัวเลือกในช่วงของหัวข้อนั้น แล้ววางกล่องไว้ทางซ้ายของคำ
   const checks=(key,reHead,reEnd)=>{ const h=find(reHead,svc); if(!h) return; const L=h.L;
     let end=L.cs.length; if(reEnd){ const m=new RegExp(reEnd.source).exec(L.text.slice(h.j)); if(m) end=h.j+m.index; }
-    const seg=L.text.slice(h.j,end), opts={};
-    for(const o of DEF[key].opts){ const k=seg.indexOf(o); if(k<0) continue; const c=L.cs[h.j+k];
-      const prev=L.cs[h.j+k-1], boxX=(prev&&!/[ก-๛A-Za-z0-9]/.test(prev.ch))?prev.x0+((prev.x1-prev.x0)-9.6)/2:c.x0-11.5;
+    const seg=L.text.slice(h.j,end), opts={}, taken=[];
+    const BOX=/[\u20DE\u25A1\u2610\u25A2\u274F\uF06F\uF0A8\uF071\uF0FE□☐]/;
+    const boxAt=k=>{ const prev=L.cs[h.j+k-1]; return (prev&&(BOX.test(prev.ch)||!/[ก-๛A-Za-z0-9]/.test(prev.ch)))?prev:null; };
+    // ตัวเลือกยาวก่อน (กัน "แพ้" ไปตรงกับ "ไม่มีประวัติแพ้") และต้องมีกล่องหน้าคำถ้าแบบฟอร์มมีกล่อง
+    const hasBox=[...seg].some(ch=>BOX.test(ch));
+    for(const o of [...DEF[key].opts].sort((a,b)=>b.length-a.length)){
+      let k=-1, from=0;
+      while((k=seg.indexOf(o,from))>=0){ const ov=taken.some(([a,b])=>k<b&&k+o.length>a); if(!ov&&(!hasBox||boxAt(k))) break; from=k+1; }
+      if(k<0) continue; taken.push([k,k+o.length]);
+      const c=L.cs[h.j+k], bx=boxAt(k), boxX=bx?bx.x0+((bx.x1-bx.x0)-9.6)/2:c.x0-11.5;
       opts[o]=[+boxX.toFixed(1),+(L.base-9.4).toFixed(1)]; }
     if(Object.keys(opts).length) out[key]={key,type:'check',opts}; };
   checks('marital',/สถานะ/);
@@ -296,7 +317,7 @@ function detect({lines,W,H}){
   if(ec){ textField('ec_name',find(/ชื่อ-?สกุล/,ec)); textField('ec_rel',find(/เกี่ยวข้องเป็น/,ec));
     textField('ec_addr',find(/ที่อยู่ของผู้ที่ติดต่อได้/,ec)); textField('ec_phone',find(/เบอร์โทร/,ec)); }
   // ลายเซ็น และความสัมพันธ์
-  { const h=take(find(/ลงชื่อ(\(ตัวบรรจง\))?/,ec||svc)); if(h){ const L=h.L, x=L.cs[h.j-1].x1+2, x2=Math.min(regionEnd(L,h.j),x+140);
+  { const h=take(find(/ลงชื่อ(?!ไว้)(\(ตัวบรรจง\))?/,ec||svc)); if(h){ const L=h.L, x=L.cs[h.j-1].x1+2, x2=Math.min(regionEnd(L,h.j),x+140);
       out.signature={key:'signature',type:'sig',x:+x.toFixed(1),y:+(L.base-26).toFixed(1),w:+(x2-x).toFixed(1),h:25}; } }
   textField('signerRel',find(/ความสัมพันธ์เป็น/,ec||svc));
 
@@ -307,8 +328,7 @@ function detect({lines,W,H}){
 $('#usePage').onclick=async()=>{
   const b=$('#usePage'); b.disabled=true; b.textContent='กำลังวางช่อง...';
   try{
-    const n=pageNo(), pl=await pageLines(n), {fields,W,H}=detect(pl);
-    const c=await renderPage(n,150/72);
+    const n=pageNo(), pl=await pageLines(n), c=await renderPage(n,150/72), {fields,W,H}=detect(pl,c);
     const tpl={id:null,bg:c.toDataURL('image/jpeg',.85),w:+W.toFixed(2),h:+H.toFixed(2),fields};
     const found=fields.filter(f=>!f.missing).length;
     if(!pl.lines.length) msg($('#gmsg'),'หน้านี้ไม่มีข้อความที่อ่านได้ (อาจเป็นภาพสแกน) — ต้องวางช่องเองทั้งหมด','err');
